@@ -1437,7 +1437,7 @@ function SystemDetailPage({ system, integrations, onBack, onAddIntegration, onUp
 }
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [systems,      setSystems]     = useState(INIT_SYSTEMS);
   const [integrations, setIntegrations]= useState(INIT_INTEGRATIONS);
   const [page,         setPage]        = useState("systems");
