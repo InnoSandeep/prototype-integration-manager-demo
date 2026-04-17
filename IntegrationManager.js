@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+const { useState, useMemo, useEffect, useRef } = React;
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const C = {
