@@ -1203,7 +1203,7 @@ function EditIntegrationDrawer({ open, integration, system, onClose, onSave }) {
   );
 }
 
-// ─── NAV — Phase 2: polished PREVIEW badge ────────────────────────────────────
+// ─── NAV ──────────────────────────────────────────────────────────────────────
 function TopNav() {
   return (
     <div style={{height:46,background:C.navBg,borderBottom:`1px solid ${C.navBorder}`,display:"flex",alignItems:"center",padding:"0 24px",position:"sticky",top:0,zIndex:100,flexShrink:0}}>
@@ -1214,7 +1214,6 @@ function TopNav() {
       <div style={{width:1,height:18,background:C.navBorder,margin:"0 20px"}}/>
       {["Workflows","My Approvals"].map(l=><NavLink key={l} label={l}/>)}
       <div style={{flex:1}}/>
-      <div style={{fontFamily:MONO,fontSize:11,color:C.navText,background:C.navBorder,padding:"3px 10px"}}>v0.9.0-alpha</div>
     </div>
   );
 }
@@ -1222,7 +1221,6 @@ function NavLink({ label }) {
   return (
     <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"0 12px",height:46,opacity:0.7,cursor:"default"}}>
       <span style={{fontFamily:FONT,fontSize:13,fontWeight:500,color:C.navText}}>{label}</span>
-      <span style={{background:"#2A3447",border:"1px solid #3A4A60",fontFamily:FONT,fontSize:9,fontWeight:700,color:"#8A9AB0",padding:"2px 5px",letterSpacing:"0.07em"}}>PREVIEW</span>
     </div>
   );
 }
