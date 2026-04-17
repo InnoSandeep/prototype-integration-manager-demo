@@ -29,12 +29,12 @@ const INCOMING_AUTH_TYPES = ["API Key (header)","HMAC Signature","No Authenticat
 
 
 const PRODUCT_OBJECTS = {
-  "iMaintenance": ["Work Order","Notification","Operation","Component","Equipment","Functional Location","Measurement Point","Work Log","Attachment","Observation"],
-  "mRounds":      ["Round","Round Plan","Asset","Location","Task","Reading","Issue","Action","Assignment"],
+  "iMaintenance": ["Work Order","Notification","Operation","Component","Equipment","Functional Location","Measurement Point","Work Log","Attachment","Failure Reporting"],
+  "mRounds":      ["Round","Round Plan","Asset","Location","Task","Issue","Action","Assignment"],
   "mInventory":   ["Material","Plant","Storage Location","Storage Bin","Stock","Reservation","Goods Receipt","Goods Issue","Transfer Posting","Cycle Count","Label"],
-  "EHS":          ["Incident","Observation","Alert","JHA","Permit","Risk Assessment","Audit"],
-  "Platform":     ["User","Transaction Compound Object","External System"],
-}
+  "EHS":          ["Incident","Observation","Action","Permit","Risk Assessment","Audit","JHA"],
+  "Platform":     ["Transition Compound Object","External System","Audit"],
+};
 const PRODUCTS = Object.keys(PRODUCT_OBJECTS);
 
 const SAMPLE_FIELDS = [
@@ -402,7 +402,8 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
   const [fetchState,setFetch]= useState("idle");
   const [published,setPublished] = useState(null);
   const [wbModal,setWbModal] = useState(false);
-  const fetchTimer = useRef(null);
+  const fetchTimer    = useRef(null);
+  const postTestTimer = useRef(null);
 
   const set   = (k,v) => setForm(f=>({...f,[k]:v}));
   const touch = k     => setTouched(t=>({...t,[k]:true}));
@@ -411,7 +412,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     if(open){ setStep(1);setForm(blankIntegrationForm());setErrors({});setTouched({});setAdvOpen(false);setValOpen(false);setFetch("idle");setPublished(null);setWbModal(false); }
   },[open]);
   useEffect(()=>{ if(system?.errorEmail) set("advErrorEmail",system.errorEmail); },[system]);
-  useEffect(()=>()=>clearTimeout(fetchTimer.current),[]);
+  useEffect(()=>()=>{ clearTimeout(fetchTimer.current); clearTimeout(postTestTimer.current); },[]);
   if(!open) return null;
 
   const isInbound        = form.direction==="inbound";
@@ -421,10 +422,6 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
   const isInboundWebhook = isInbound && isWebhook;
   const isOutboundWebhook= isOutbound && isWebhook;
   const showStepper      = !isOutboundWebhook;
-
-  // POST test timer ref
-  const postTestTimer = useRef(null);
-  useEffect(()=>()=>clearTimeout(postTestTimer.current),[]);
 
   function validateStep1() {
     const e={};
@@ -453,11 +450,6 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     clearTimeout(postTestTimer.current);
     postTestTimer.current=setTimeout(()=>{
       if(!form.baseUrl.trim()){ set("postTestState","error"); set("postTestError","No Base URL configured — add a Base URL before testing."); return; }
-      if(!isValidUrl(form.baseUrl.trim())){ set("postTestState","error"); set("postTestError","Base URL is not a valid URL — check the format (e.g. https://api.example.com/data) and try again."); return; }
-      if(form.requestBody.trim()){
-        try{ JSON.parse(form.requestBody.trim()); }
-        catch{ set("postTestState","error"); set("postTestError","Request body is not valid JSON — fix the syntax before testing."); return; }
-      }
       // Simulate success for demo
       set("postTestState","success");
       set("schemaSummary",{recordsReturned:1,fieldsDetected:12,nestedObjects:4,arraysDetected:1,referenceLikeFields:2,pulledAt:new Date().toISOString()});
