@@ -1590,6 +1590,17 @@ function SystemDetailPage({ system, integrations, onBack, onAddIntegration, onUp
   );
 }
 
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function Toast({ message, onDone }) {
+  useEffect(()=>{ const t=setTimeout(onDone,4000); return ()=>clearTimeout(t); },[]);
+  return (
+    <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:C.green,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:600,padding:"11px 22px",zIndex:9999,boxShadow:"0 4px 20px rgba(0,0,0,0.18)",display:"flex",alignItems:"center",gap:10,minWidth:340,maxWidth:500,borderRadius:3}}>
+      <span style={{fontSize:16}}>✓</span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 function App() {
   const [systems,      setSystems]     = useState(INIT_SYSTEMS);
@@ -1599,6 +1610,7 @@ function App() {
   const [selectedId,   setSelected]    = useState(null);
   const [sysDrawer,    setSysDrawer]   = useState(false);
   const [intDrawer,    setIntDrawer]   = useState(false);
+  const [toast,        setToast]       = useState(null);
 
   const selectedSystem = systems.find(s=>s.id===selectedId);
 
@@ -1616,7 +1628,8 @@ function App() {
         {page==="systems"&&<SystemsPage systems={systems} integrations={integrations} onViewSystem={id=>{setSelected(id);setPage("detail");}} onAddSystem={()=>setSysDrawer(true)}/>}
         {page==="detail"&&selectedSystem&&<SystemDetailPage system={selectedSystem} integrations={integrations} onBack={()=>{setPage("systems");setSelected(null);}} onAddIntegration={()=>setIntDrawer(true)} onUpdateSystem={handleUpdateSystem} onUpdateIntegration={handleUpdateIntegration} onDisableIntegration={handleDisableIntegration}/>}
       </div>
-      <AddSystemDrawer open={sysDrawer} onClose={()=>setSysDrawer(false)} onSave={sys=>{setSystems(p=>[sys,...p]);}}/>
+      <AddSystemDrawer open={sysDrawer} onClose={()=>setSysDrawer(false)} onSave={sys=>{setSystems(p=>[sys,...p]);if(sys.status!=="draft"){setSelected(sys.id);setPage("detail");setToast("System created successfully. You can now add an integration.");}}}/>
+      {toast&&<Toast message={toast} onDone={()=>setToast(null)}/>}
       <AddIntegrationDrawer open={intDrawer} system={selectedSystem} onClose={()=>setIntDrawer(false)} onSave={handleSaveIntegration} onGoToSystem={()=>setIntDrawer(false)} webhooks={webhooks} onAddWebhook={handleAddWebhook}/>
     </div>
   );
