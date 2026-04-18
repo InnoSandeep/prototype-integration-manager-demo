@@ -1616,7 +1616,7 @@ function App() {
         {page==="systems"&&<SystemsPage systems={systems} integrations={integrations} onViewSystem={id=>{setSelected(id);setPage("detail");}} onAddSystem={()=>setSysDrawer(true)}/>}
         {page==="detail"&&selectedSystem&&<SystemDetailPage system={selectedSystem} integrations={integrations} onBack={()=>{setPage("systems");setSelected(null);}} onAddIntegration={()=>setIntDrawer(true)} onUpdateSystem={handleUpdateSystem} onUpdateIntegration={handleUpdateIntegration} onDisableIntegration={handleDisableIntegration}/>}
       </div>
-      <AddSystemDrawer open={sysDrawer} onClose={()=>setSysDrawer(false)} onSave={sys=>{setSystems(p=>[sys,...p]);}} />
+      <AddSystemDrawer open={sysDrawer} onClose={()=>setSysDrawer(false)} onSave={sys=>{setSystems(p=>[sys,...p]);}}/>
       <AddIntegrationDrawer open={intDrawer} system={selectedSystem} onClose={()=>setIntDrawer(false)} onSave={handleSaveIntegration} onGoToSystem={()=>setIntDrawer(false)} webhooks={webhooks} onAddWebhook={handleAddWebhook}/>
     </div>
   );
