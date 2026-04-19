@@ -414,6 +414,64 @@ function AuthCredentials({ authType, form, set, prefix="" }) {
   );
 }
 
+// ─── MULTI-SELECT DROPDOWN ───────────────────────────────────────────────────
+function MultiSelectDropdown({ options, value, onChange, placeholder, disabled, error }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!open) return;
+    function handler(e){ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown",handler);
+    return ()=>document.removeEventListener("mousedown",handler);
+  },[open]);
+  const selected = value||[];
+  const toggle = opt => onChange(selected.includes(opt)?selected.filter(o=>o!==opt):[...selected,opt]);
+  const label = selected.length===0?(placeholder||"— Select —"):selected.length===1?selected[0]:`${selected.length} collections selected`;
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      <button onClick={()=>!disabled&&setOpen(o=>!o)} disabled={disabled} style={{
+        width:"100%",boxSizing:"border-box",fontFamily:FONT,fontSize:13,
+        background:disabled?C.bg2:C.bg0,
+        border:`1px solid ${error?C.red:open?C.blue:C.border1}`,
+        color:selected.length?C.text0:C.text3,
+        padding:"7px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",
+        cursor:disabled?"not-allowed":"pointer",textAlign:"left",outline:"none",
+      }}>
+        <span>{label}</span>
+        <span style={{color:C.text3,fontSize:10,flexShrink:0,marginLeft:6}}>{open?"▲":"▼"}</span>
+      </button>
+      {open&&(
+        <div style={{
+          position:"absolute",top:"100%",left:0,right:0,zIndex:20,
+          background:C.bg0,border:`1px solid ${C.blue}`,borderTop:"none",
+          maxHeight:230,overflowY:"auto",boxShadow:"0 4px 16px rgba(0,0,0,0.10)",
+        }}>
+          {options.map(opt=>{
+            const checked=selected.includes(opt);
+            return (
+              <div key={opt} onClick={()=>toggle(opt)} style={{
+                display:"flex",alignItems:"center",gap:8,padding:"8px 10px",
+                background:checked?C.blueBg:C.bg0,
+                borderBottom:`1px solid ${C.border0}`,cursor:"pointer",
+              }}>
+                <div style={{
+                  width:14,height:14,flexShrink:0,
+                  border:`1.5px solid ${checked?C.blue:C.border1}`,
+                  background:checked?C.blue:"transparent",
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                }}>
+                  {checked&&<span style={{color:"#fff",fontSize:9,fontWeight:900,lineHeight:1}}>✓</span>}
+                </div>
+                <span style={{fontFamily:FONT,fontSize:12,color:C.text0}}>{opt}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── AI ACTION BUTTON ────────────────────────────────────────────────────────
 function AIActionButton({ label, desc, running, result, onClick }) {
   return (
@@ -801,23 +859,17 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
   const [mappingOpen,setMappingOpen] = useState(false);
   const fetchTimer    = useRef(null);
   const postTestTimer = useRef(null);
+  const scrollRef     = useRef(null);
 
   const set   = (k,v) => setForm(f=>({...f,[k]:v}));
   const touch = k     => setTouched(t=>({...t,[k]:true}));
-  function toggleBusinessObject(col) {
-    setForm(f=>{
-      const cur=f.businessObjects||[];
-      const next=cur.includes(col)?cur.filter(c=>c!==col):[...cur,col];
-      return {...f,businessObjects:next};
-    });
-    touch("businessObjects");
-  }
 
   useEffect(()=>{
     if(open){ setStep(1);setForm(blankIntegrationForm());setErrors({});setTouched({});setAdvOpen(false);setValOpen(false);setFetch("idle");setPublished(null);setWbModal(false);setMappingOpen(false); }
   },[open]);
   useEffect(()=>{ if(system?.errorEmail) set("advErrorEmail",system.errorEmail); },[system]);
   useEffect(()=>()=>{ clearTimeout(fetchTimer.current); clearTimeout(postTestTimer.current); },[]);
+  useEffect(()=>{ if(scrollRef.current) scrollRef.current.scrollTop=0; },[step]);
   if(!open) return null;
 
   const isInbound        = form.direction==="inbound";
@@ -975,7 +1027,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
         </div>
         {showStepper&&<StepIndicator current={step} steps={["Connection & Basics","Mapping, Runtime & Publish"]}/>}
 
-        <div style={{flex:1,overflowY:"auto",padding:"22px 22px 8px"}}>
+        <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:"22px 22px 8px"}}>
           {step===1&&(
             <>
               {/* Name */}
@@ -1016,6 +1068,38 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     </>}
                   </div>
                   <FieldError msg={touched.method&&errors.method}/>
+                </div>
+              )}
+
+              {/* Product + Collections — inbound only, appears right after Method */}
+              {form.method&&isInbound&&(
+                <div style={{marginBottom:22}}>
+                  <SectionRule label="Product & Collections"/>
+                  <div style={{marginBottom:12}}>
+                    <FieldLabel label="Product" required/>
+                    <FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObjects",[]);touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/>
+                    <FieldError msg={touched.product&&errors.product}/>
+                  </div>
+                  {form.product&&(
+                    <div>
+                      <FieldLabel label="Collections" required helper="Select all object types this integration maps to"/>
+                      <MultiSelectDropdown
+                        options={PRODUCT_OBJECTS[form.product]||[]}
+                        value={form.businessObjects}
+                        onChange={v=>{set("businessObjects",v);touch("businessObjects");}}
+                        placeholder="— Select collections —"
+                        error={touched.businessObjects&&!!errors.businessObjects}
+                      />
+                      {touched.businessObjects&&errors.businessObjects&&<FieldError msg={errors.businessObjects}/>}
+                      {(form.businessObjects||[]).length>0&&(
+                        <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:5}}>
+                          {form.businessObjects.map(col=>(
+                            <span key={col} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,fontFamily:FONT,fontSize:11,fontWeight:600,color:C.blue,padding:"2px 9px"}}>{col}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1133,44 +1217,6 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     <button onClick={()=>setWbModal(true)} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,color:C.blue,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"7px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>+ Create New Webhook</button>
                     <div style={{fontFamily:FONT,fontSize:11,color:C.text3,marginTop:5}}>Opens Webhook Registry to define a new delivery endpoint</div>
                   </div>
-                </div>
-              )}
-
-              {/* Product + Collections — inbound only, multi-select chips */}
-              {form.method&&isInbound&&(
-                <div style={{marginBottom:22}}>
-                  <SectionRule label="Product & Collections"/>
-                  <div style={{marginBottom:12}}>
-                    <FieldLabel label="Product" required/>
-                    <FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObjects",[]);touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/>
-                    <FieldError msg={touched.product&&errors.product}/>
-                  </div>
-                  {form.product&&(
-                    <div>
-                      <FieldLabel label="Collections" required helper="Select all object types this integration maps to"/>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
-                        {(PRODUCT_OBJECTS[form.product]||[]).map(col=>{
-                          const active=(form.businessObjects||[]).includes(col);
-                          return (
-                            <button key={col} onClick={()=>toggleBusinessObject(col)} style={{
-                              padding:"5px 12px",fontFamily:FONT,fontSize:12,fontWeight:active?700:400,
-                              cursor:"pointer",border:`1px solid ${active?C.blue:C.border1}`,
-                              background:active?C.blueBg:C.bg0,color:active?C.blue:C.text1,
-                              display:"flex",alignItems:"center",gap:5,
-                            }}>
-                              {active&&<span style={{fontSize:9,fontWeight:900}}>✓</span>}{col}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      {touched.businessObjects&&errors.businessObjects&&<FieldError msg={errors.businessObjects}/>}
-                      {(form.businessObjects||[]).length>0&&(
-                        <div style={{marginTop:8,fontFamily:FONT,fontSize:11,color:C.text3}}>
-                          {form.businessObjects.length} collection{form.businessObjects.length!==1?"s":""} selected
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -1292,7 +1338,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                             )}
                           </div>
                           <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:700,padding:"7px 16px",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
-                            {hasMapping?"Edit Mapping →":"Configure Mapping →"}
+                            Open Mapping Workspace →
                           </button>
                         </div>
                       );
@@ -1387,7 +1433,11 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
             <>
               <button onClick={()=>setStep(1)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 14px",cursor:"pointer"}}>← Back</button>
               <button onClick={()=>handleSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 16px",cursor:"pointer"}}>Save as Draft</button>
-              <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Configure Mapping & Publish →</button>
+              {unmappedRequired>0||form.fieldMappings.every(m=>!m.target)?(
+                <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Continue →</button>
+              ):(
+                <button onClick={()=>handleSave(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Publish Integration</button>
+              )}
             </>
           )}
           {step===2&&!isPolling&&(
