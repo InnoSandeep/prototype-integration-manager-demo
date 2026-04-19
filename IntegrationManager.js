@@ -972,7 +972,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 14px"}}>
                       <div><FieldLabel label="Frequency" required/><FieldSelect value={form.frequency} onChange={v=>set("frequency",v)} options={FREQ_OPTIONS}/></div>
-                      <div><FieldLabel label="Start Time" helper="Local time"/><FieldInput value={form.startTime} onChange={v=>set("startTime",v)} placeholder="06:00" mono/></div>
+                      <div><FieldLabel label="Start Time"/><FieldInput value={form.startTime} onChange={v=>set("startTime",v)} placeholder="06:00" mono/><div style={{fontFamily:FONT,fontSize:11,color:C.text3,marginTop:4}}>Local time</div></div>
                     </div>
                   </div>
                 </>
