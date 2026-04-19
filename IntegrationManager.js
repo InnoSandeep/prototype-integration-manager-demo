@@ -69,19 +69,119 @@ const SAMPLE_FIELDS = [
   { src:"asset.id",              srcType:"string",   required:true,  refLookup:true,  nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
   { src:"asset.name",            srcType:"string",   required:false, refLookup:true,  nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
   { src:"asset.location.site",   srcType:"string",   required:false, refLookup:false, nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
-  { src:"measurements[0].value", srcType:"number",   required:true,  refLookup:false, nested:false, arrayPath:true,  target:"", rowState:"unmapped" },
-  { src:"measurements[0].unit",  srcType:"string",   required:false, refLookup:false, nested:false, arrayPath:true,  target:"", rowState:"unmapped" },
+  { src:"measurements[].value",  srcType:"number",   required:true,  refLookup:false, nested:false, arrayPath:true,  target:"", rowState:"unmapped" },
+  { src:"measurements[].unit",   srcType:"string",   required:false, refLookup:false, nested:false, arrayPath:true,  target:"", rowState:"unmapped" },
   { src:"severity",              srcType:"enum",     required:false, refLookup:false, nested:false, arrayPath:false, target:"", rowState:"unmapped" },
   { src:"description",           srcType:"string",   required:false, refLookup:false, nested:false, arrayPath:false, target:"", rowState:"unmapped" },
   { src:"links.workOrder.href",  srcType:"url",      required:false, refLookup:true,  nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
   { src:"metadata.source",       srcType:"string",   required:false, refLookup:false, nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
   { src:"metadata.version",      srcType:"string",   required:false, refLookup:false, nested:true,  arrayPath:false, target:"", rowState:"unmapped" },
 ];
-const AUTO_MAP_RULES = {
-  "id":"id","timestamp":"observation_time","asset.id":"asset_id","asset.name":"asset_name",
-  "measurements[0].value":"value","measurements[0].unit":"unit","severity":"severity","description":"description",
+
+// Nested target schema: product → collection → fields with dot-path notation
+const NESTED_TARGET_SCHEMA = {
+  "iMaintenance": {
+    "Observation": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"observation_time",      type:"datetime", required:true  },
+      { path:"asset.id",              type:"string",   required:true  },
+      { path:"asset.name",            type:"string",   required:false },
+      { path:"asset.location.site",   type:"string",   required:false },
+      { path:"measurements[].value",  type:"number",   required:true,  array:true },
+      { path:"measurements[].unit",   type:"string",   required:false, array:true },
+      { path:"severity",              type:"enum",     required:false },
+      { path:"description",           type:"string",   required:false },
+      { path:"work_order_ref",        type:"url",      required:false },
+      { path:"source_system",         type:"string",   required:false },
+      { path:"schema_version",        type:"string",   required:false },
+      { path:"created_by",            type:"string",   required:false },
+      { path:"status",                type:"enum",     required:false },
+    ],
+    "Work Order": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"title",                 type:"string",   required:true  },
+      { path:"asset.id",              type:"string",   required:true  },
+      { path:"asset.name",            type:"string",   required:false },
+      { path:"priority",              type:"enum",     required:false },
+      { path:"plannedStart",          type:"datetime", required:false },
+      { path:"plannedEnd",            type:"datetime", required:false },
+      { path:"status",                type:"enum",     required:false },
+      { path:"assignee.id",           type:"string",   required:false },
+      { path:"description",           type:"string",   required:false },
+    ],
+    "Notification": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"type",                  type:"enum",     required:true  },
+      { path:"asset.id",              type:"string",   required:true  },
+      { path:"message",               type:"string",   required:false },
+      { path:"priority",              type:"enum",     required:false },
+      { path:"created_at",            type:"datetime", required:false },
+    ],
+  },
+  "EHS": {
+    "Observation": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"observation_time",      type:"datetime", required:true  },
+      { path:"location.site",         type:"string",   required:true  },
+      { path:"location.area",         type:"string",   required:false },
+      { path:"observer.id",           type:"string",   required:false },
+      { path:"category",              type:"enum",     required:false },
+      { path:"severity",              type:"enum",     required:false },
+      { path:"description",           type:"string",   required:false },
+      { path:"status",                type:"enum",     required:false },
+    ],
+    "Incident": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"occurred_at",           type:"datetime", required:true  },
+      { path:"location.site",         type:"string",   required:true  },
+      { path:"type",                  type:"enum",     required:true  },
+      { path:"severity",              type:"enum",     required:true  },
+      { path:"description",           type:"string",   required:false },
+      { path:"involved_parties[].id", type:"string",   required:false, array:true },
+      { path:"status",                type:"enum",     required:false },
+    ],
+    "Action": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"title",                 type:"string",   required:true  },
+      { path:"due_date",              type:"date",     required:false },
+      { path:"assignee.id",           type:"string",   required:false },
+      { path:"status",                type:"enum",     required:false },
+    ],
+  },
+  "mRounds": {
+    "Round": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"name",                  type:"string",   required:true  },
+      { path:"scheduled_at",          type:"datetime", required:false },
+      { path:"status",                type:"enum",     required:false },
+      { path:"assignee.id",           type:"string",   required:false },
+    ],
+    "Issue": [
+      { path:"id",                    type:"string",   required:true  },
+      { path:"title",                 type:"string",   required:true  },
+      { path:"asset.id",              type:"string",   required:false },
+      { path:"severity",              type:"enum",     required:false },
+      { path:"description",           type:"string",   required:false },
+      { path:"created_at",            type:"datetime", required:false },
+      { path:"status",                type:"enum",     required:false },
+    ],
+  },
 };
-const TARGET_FIELDS = ["— Select target —","id","observation_time","asset_id","asset_name","site","value","unit","severity","description","work_order_ref","source_system","schema_version","created_by","status"];
+
+const AUTO_MAP_RULES = {
+  "id":"id",
+  "timestamp":"observation_time",
+  "asset.id":"asset.id",
+  "asset.name":"asset.name",
+  "asset.location.site":"asset.location.site",
+  "measurements[].value":"measurements[].value",
+  "measurements[].unit":"measurements[].unit",
+  "severity":"severity",
+  "description":"description",
+  "links.workOrder.href":"work_order_ref",
+  "metadata.source":"source_system",
+  "metadata.version":"schema_version",
+};
 
 // ─── SEED DATA ────────────────────────────────────────────────────────────────
 // Systems are lightweight identity containers — no connection/auth/test data
@@ -94,9 +194,9 @@ const INIT_SYSTEMS = [
 ];
 // Integrations — no workflowAction, method:"polling" not "rest_api"
 const INIT_INTEGRATIONS = [
-  { id:"int_obs",    systemId:"sys_pi", name:"Observation Polling", status:"active",          direction:"inbound",  method:"polling", product:"iMaintenance", businessObject:"Observation", lastRunAt:"2025-04-14T08:30:00Z", frequency:"Every 15 min" },
-  { id:"int_wo",     systemId:"sys_pi", name:"WO Dispatch",         status:"active",          direction:"outbound", method:"webhook", product:null,           businessObject:null,          lastRunAt:"2025-04-14T07:15:00Z", frequency:null },
-  { id:"int_alerts", systemId:"sys_pi", name:"Alert Intake",        status:"ready_to_publish",direction:"inbound",  method:"webhook", product:"EHS",          businessObject:"Alert",       lastRunAt:null, frequency:null },
+  { id:"int_obs",    systemId:"sys_pi", name:"Observation Polling", status:"active",          direction:"inbound",  method:"polling", product:"iMaintenance", businessObjects:["Observation"], lastRunAt:"2025-04-14T08:30:00Z", frequency:"Every 15 min" },
+  { id:"int_wo",     systemId:"sys_pi", name:"WO Dispatch",         status:"active",          direction:"outbound", method:"webhook", product:null,           businessObjects:[],              lastRunAt:"2025-04-14T07:15:00Z", frequency:null },
+  { id:"int_alerts", systemId:"sys_pi", name:"Alert Intake",        status:"ready_to_publish",direction:"inbound",  method:"webhook", product:"EHS",          businessObjects:["Observation"], lastRunAt:null, frequency:null },
 ];
 const DEMO_WEBHOOKS = [
   { id:"wh_001", name:"CMMS Work Order Sync", targetUrl:"https://cmms.company.com/webhooks/inno", signingSecret:"whsec_abc123", eventTypes:"work_order.created,work_order.updated" },
@@ -146,7 +246,8 @@ function summaryLine(integration, systemName) {
   const sys = systemName || "external system";
   if (integration.status==="draft") return "Not yet active — complete configuration to start data flow.";
   if (integration.status==="disabled") return "Paused — no data is flowing.";
-  const obj = integration.businessObject;
+  const objs = integration.businessObjects || [];
+  const obj = objs[0] || null;
   const prod = integration.product;
   const freq = integration.frequency ? integration.frequency.toLowerCase() : "on a schedule";
   const { direction, method } = integration;
@@ -193,7 +294,7 @@ function blankIntegrationForm() {
     // Outbound Webhook
     selectedWebhookId:"",
     // Common inbound
-    product:"", businessObject:"",
+    product:"", businessObjects:[],
     triggerOn:"Always", failureBehavior:"Auto-retry 3x then DLQ",
     // Step 2 runtime
     frequency:"Every 15 min", startTime:"06:00",
@@ -313,6 +414,25 @@ function AuthCredentials({ authType, form, set, prefix="" }) {
   );
 }
 
+// ─── AI ACTION BUTTON ────────────────────────────────────────────────────────
+function AIActionButton({ label, desc, running, result, onClick }) {
+  return (
+    <button onClick={onClick} disabled={running} style={{
+      display:"flex",flexDirection:"column",alignItems:"flex-start",
+      background:"linear-gradient(135deg,#F3E5F5 0%,#EEF0FB 100%)",
+      border:`1px dashed ${C.purpleBorder}`,padding:"7px 14px",
+      cursor:running?"wait":"pointer",minWidth:170,textAlign:"left",
+    }}>
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+        <span style={{fontSize:11,color:C.purple}}>{running?"⏳":"✦"}</span>
+        <span style={{fontFamily:FONT,fontSize:12,fontWeight:700,color:C.purple}}>{running?`${label}…`:label}</span>
+      </div>
+      {!result&&!running&&<span style={{fontFamily:FONT,fontSize:10,color:C.text3,lineHeight:1.3}}>{desc}</span>}
+      {result&&<span style={{fontFamily:FONT,fontSize:10,color:C.purple,lineHeight:1.3}}>{result}</span>}
+    </button>
+  );
+}
+
 // ─── SELECTION CARD ───────────────────────────────────────────────────────────
 function SelectionCard({ label, sublabel, description, selected, onClick, disabled, tag }) {
   const [hov,setHov]=useState(false);
@@ -417,6 +537,256 @@ function WebhookRegistryModal({ open, onClose, onSave }) {
   );
 }
 
+// ─── MAPPING WORKSPACE (full-screen overlay for polling integrations) ─────────
+function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPublish }) {
+  const [autoMapRunning, setAutoMapRunning] = useState(false);
+  const [autoMapResult, setAutoMapResult]   = useState(null);
+  const [validateRunning, setValidateRunning] = useState(false);
+  const [validateResult, setValidateResult]   = useState(null);
+  const [valOpen, setValOpen] = useState(false);
+  const [fetchState, setFetch] = useState("idle");
+  const fetchTimer = useRef(null);
+
+  useEffect(()=>{ if(!open){ setAutoMapResult(null); setValidateResult(null); setValOpen(false); setFetch("idle"); } },[open]);
+  useEffect(()=>()=>clearTimeout(fetchTimer.current),[]);
+  if(!open) return null;
+
+  const collections = form.businessObjects || [];
+  const product = form.product || "";
+
+  function getTargetFields(col) {
+    return (NESTED_TARGET_SCHEMA[product]?.[col] || []).map(f=>f.path);
+  }
+  function allTargetFields() {
+    const all = [];
+    collections.forEach(col=>{
+      (NESTED_TARGET_SCHEMA[product]?.[col]||[]).forEach(f=>{ all.push(`${col}::${f.path}`); });
+    });
+    return all;
+  }
+
+  function updateMapping(idx, key, val) {
+    setForm(f=>{ const m=[...f.fieldMappings]; m[idx]={...m[idx],[key]:val,rowState:val?(m[idx].rowState==="auto-mapped"?"auto-mapped":"manual"):"unmapped"}; return {...f,fieldMappings:m}; });
+  }
+
+  function handleFetchSample() {
+    setFetch("loading"); clearTimeout(fetchTimer.current);
+    fetchTimer.current=setTimeout(()=>{
+      const sample=`{\n  "id": "OBS-1042",\n  "timestamp": "2025-04-14T08:30:00Z",\n  "asset": {\n    "id": "PUMP-12",\n    "name": "Primary Feed Pump",\n    "location": { "site": "Houston Plant" }\n  },\n  "measurements": [\n    { "value": 98.4, "unit": "degC" }\n  ],\n  "severity": "warning",\n  "description": "Temperature threshold exceeded",\n  "links": { "workOrder": { "href": "/api/workorders/WO-9921" } },\n  "metadata": { "source": "PI-historian", "version": "2.1" }\n}`;
+      setForm(f=>({...f,sampleJson:sample,sampleFetched:true,schemaSummary:{recordsReturned:1,fieldsDetected:12,nestedObjects:4,arraysDetected:1,referenceLikeFields:2,pulledAt:new Date().toISOString()}}));
+      setFetch("done");
+    },1800);
+  }
+
+  function handleAutoMap() {
+    setAutoMapRunning(true); setAutoMapResult(null);
+    setTimeout(()=>{
+      setForm(f=>({...f,fieldMappings:f.fieldMappings.map(m=>{
+        const rule = AUTO_MAP_RULES[m.src];
+        if(!rule||m.target) return m.target?{...m,rowState:"manual"}:m;
+        // find first collection that has this path
+        let matched = null;
+        for(const col of (f.businessObjects||[])){
+          const fields = NESTED_TARGET_SCHEMA[f.product]?.[col]||[];
+          if(fields.some(fd=>fd.path===rule)){ matched=`${col}::${rule}`; break; }
+        }
+        return matched ? {...m,target:matched,rowState:"auto-mapped"} : m;
+      })}));
+      const mappedCount = form.fieldMappings.filter(m=>AUTO_MAP_RULES[m.src]).length;
+      setAutoMapResult(`${mappedCount} field${mappedCount!==1?"s":""} mapped`);
+      setAutoMapRunning(false);
+    },1200);
+  }
+
+  function handleValidate() {
+    setValidateRunning(true); setValidateResult(null);
+    setTimeout(()=>{
+      const mp=form.fieldMappings;
+      const mapped=mp.filter(m=>m.target).map(m=>m.target);
+      const dups=mapped.filter((t,i)=>mapped.indexOf(t)!==i);
+      const result={
+        requiredMapped:mp.filter(m=>m.required&&m.target).length,
+        requiredTotal:mp.filter(m=>m.required).length,
+        optionalSkipped:mp.filter(m=>!m.required&&!m.target).length,
+        typeConflicts:0,
+        refLookups:mp.filter(m=>m.refLookup&&m.target).length,
+        duplicateTargets:dups.length,
+        unmappedRequired:mp.filter(m=>m.required&&!m.target).length,
+        ranAt:new Date().toISOString(),
+      };
+      setForm(f=>({...f,validationResult:result}));
+      setValidateRunning(false);
+      const issues = result.unmappedRequired + result.duplicateTargets;
+      setValidateResult(issues===0?"All checks passed":`${issues} issue${issues!==1?"s":""} found`);
+    },1000);
+  }
+
+  const unmappedRequired = form.fieldMappings.filter(m=>m.required&&!m.target).length;
+  const dupTargets = (()=>{ const mp=form.fieldMappings.filter(m=>m.target).map(m=>m.target); return mp.filter((t,i)=>mp.indexOf(t)!==i); })();
+  const mappedCount = form.fieldMappings.filter(m=>m.target).length;
+
+  const targetOpts = allTargetFields();
+
+  return (
+    <>
+      <div style={{position:"fixed",inset:0,background:"rgba(15,25,35,0.35)",zIndex:210}}/>
+      <div style={{position:"fixed",inset:0,zIndex:211,display:"flex",flexDirection:"column",background:C.bg0}}>
+        {/* Header */}
+        <div style={{height:56,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",borderBottom:`1px solid ${C.border0}`,background:C.bg1,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:16}}>
+            <button onClick={onBack} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer"}}>← Back</button>
+            <div>
+              <span style={{fontFamily:FONT,fontWeight:700,fontSize:15,color:C.text0}}>Data Mapping</span>
+              {system&&<span style={{fontFamily:FONT,fontSize:11,color:C.text3,marginLeft:8}}>· {system.name}</span>}
+            </div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontFamily:FONT,fontSize:12,color:mappedCount>0?C.text1:C.text3}}>
+              {mappedCount} of {form.fieldMappings.length} mapped
+            </span>
+            {unmappedRequired>0&&<span style={{background:C.amberBg,border:`1px solid ${C.amberBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.amber,padding:"2px 8px"}}>{unmappedRequired} required unmapped</span>}
+            {unmappedRequired===0&&mappedCount>0&&<span style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.green,padding:"2px 8px"}}>Ready</span>}
+          </div>
+        </div>
+
+        {/* Body: two-column layout */}
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+          {/* Left panel: source schema + sample */}
+          <div style={{width:340,flexShrink:0,borderRight:`1px solid ${C.border0}`,display:"flex",flexDirection:"column",overflowY:"auto",padding:"20px 20px"}}>
+            <SectionRule label="Target Collections"/>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
+              {collections.map(col=>(
+                <span key={col} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.blue,padding:"3px 10px"}}>{col}</span>
+              ))}
+            </div>
+            <SectionRule label="Source Sample"/>
+            <div style={{marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
+              {fetchState==="idle"&&<button onClick={handleFetchSample} disabled={!form.baseUrl} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:!form.baseUrl?C.text3:C.blue,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:!form.baseUrl?"not-allowed":"pointer",opacity:!form.baseUrl?0.5:1,display:"flex",alignItems:"center",gap:6}}>▶ Pull sample</button>}
+              {fetchState==="loading"&&<button disabled style={{background:C.bg0,border:`1px solid ${C.border0}`,color:C.text3,fontFamily:FONT,fontSize:12,padding:"5px 12px",cursor:"wait",display:"flex",alignItems:"center",gap:6}}><Spinner size={11}/> Pulling…</button>}
+              {fetchState==="done"&&<button onClick={handleFetchSample} style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,color:C.green,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer"}}>✓ Re-pull</button>}
+            </div>
+            {form.schemaSummary&&(
+              <div style={{background:C.bg1,border:`1px solid ${C.border0}`,borderLeft:`3px solid ${C.green}`,padding:"8px 12px",marginBottom:12}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"4px 12px"}}>
+                  {[{label:"Fields",val:form.schemaSummary.fieldsDetected},{label:"Nested",val:form.schemaSummary.nestedObjects},{label:"Arrays",val:form.schemaSummary.arraysDetected},{label:"Ref-like",val:form.schemaSummary.referenceLikeFields}].map(s=>(
+                    <div key={s.label} style={{display:"flex",alignItems:"baseline",gap:4}}><span style={{fontFamily:FONT,fontSize:15,fontWeight:700,color:C.text0}}>{s.val}</span><span style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{s.label}</span></div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {form.sampleJson&&(
+              <pre style={{fontFamily:MONO,fontSize:11,color:C.text1,background:C.bg1,border:`1px solid ${C.border0}`,padding:"10px 12px",overflowX:"auto",overflowY:"auto",maxHeight:320,margin:0,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{form.sampleJson}</pre>
+            )}
+          </div>
+
+          {/* Right panel: mapping table */}
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Toolbar */}
+            <div style={{padding:"12px 20px",borderBottom:`1px solid ${C.border0}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:C.bg0}}>
+              <AIActionButton
+                label="Auto Map"
+                desc="Match source fields to target paths automatically"
+                running={autoMapRunning}
+                result={autoMapResult}
+                onClick={handleAutoMap}
+              />
+              <AIActionButton
+                label="Validate"
+                desc="Check required fields, types, and duplicates"
+                running={validateRunning}
+                result={validateResult}
+                onClick={handleValidate}
+              />
+              <div style={{flex:1}}/>
+              {dupTargets.length>0&&<span style={{background:C.amberBg,border:`1px solid ${C.amberBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.amber,padding:"3px 8px"}}>Duplicate target</span>}
+              {(form.validationResult)&&(<button onClick={()=>setValOpen(o=>!o)} style={{background:"none",border:`1px solid ${C.border0}`,fontFamily:FONT,fontSize:12,fontWeight:600,color:C.text1,padding:"5px 10px",cursor:"pointer"}}>{valOpen?"Hide":"Show"} validation</button>)}
+            </div>
+
+            {/* Validation panel */}
+            {valOpen&&form.validationResult&&(
+              <div style={{padding:"10px 20px",background:C.bg1,borderBottom:`1px solid ${C.border0}`,flexShrink:0}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {[
+                    {label:"Required mapped",ok:form.validationResult.unmappedRequired===0,detail:`${form.validationResult.requiredMapped}/${form.validationResult.requiredTotal}`},
+                    {label:"Optional skipped",ok:true,detail:`${form.validationResult.optionalSkipped}`},
+                    {label:"Type conflicts",ok:form.validationResult.typeConflicts===0,detail:`${form.validationResult.typeConflicts}`},
+                    {label:"Duplicates",ok:form.validationResult.duplicateTargets===0,detail:`${form.validationResult.duplicateTargets}`},
+                    {label:"Ref lookups",ok:true,detail:`${form.validationResult.refLookups}`},
+                  ].map(row=>(
+                    <div key={row.label} style={{background:row.ok?C.greenBg:C.amberBg,border:`1px solid ${row.ok?C.greenBorder:C.amberBorder}`,padding:"4px 10px",display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{color:row.ok?C.green:C.amber,fontWeight:700,fontSize:12}}>{row.ok?"✓":"!"}</span>
+                      <span style={{fontFamily:FONT,fontSize:11,color:C.text1}}>{row.label}:</span>
+                      <span style={{fontFamily:FONT,fontSize:11,fontWeight:700,color:row.ok?C.text0:C.amber}}>{row.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Table */}
+            <div style={{flex:1,overflowY:"auto"}}>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(160px,1.5fr) 64px 78px 88px minmax(160px,1fr) minmax(120px,0.9fr)",padding:"6px 20px",background:C.bg2,borderBottom:`1px solid ${C.border0}`,position:"sticky",top:0,zIndex:1}}>
+                {["Source Field","Type","Required","Status","Target Path","Collection"].map(h=>(
+                  <div key={h} style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+                ))}
+              </div>
+              {form.fieldMappings.map((m,i)=>{
+                const rowBg=m.rowState==="auto-mapped"?"#F5FAF7":(!m.target&&m.required)?"#FFF8F8":i%2===0?C.bg0:C.bg1;
+                const stateLabel={
+                  "auto-mapped":{label:"Auto",color:C.green,bg:C.greenBg,border:C.greenBorder},
+                  "manual":{label:"Manual",color:C.blue,bg:C.blueBg,border:C.blueBorder},
+                  "unmapped":{label:"—",color:C.text3,bg:"transparent",border:"transparent"},
+                }[m.rowState]||{label:"—",color:C.text3,bg:"transparent",border:"transparent"};
+
+                // Parse collection::path from target value
+                const [targetCol, targetPath] = m.target ? m.target.split("::") : ["",""];
+
+                return (
+                  <div key={m.src+i} style={{display:"grid",gridTemplateColumns:"minmax(160px,1.5fr) 64px 78px 88px minmax(160px,1fr) minmax(120px,0.9fr)",padding:"6px 20px",borderBottom:`1px solid ${C.border0}`,background:rowBg,alignItems:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}}>
+                      <MonoText size={11} color={C.text0}>{m.src}</MonoText>
+                      {m.nested&&<span style={{fontSize:9,color:C.text3,background:C.bg2,border:`1px solid ${C.border0}`,padding:"0 3px"}}>nested</span>}
+                      {m.arrayPath&&<span style={{fontSize:9,color:C.purple,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,padding:"0 3px"}}>array</span>}
+                      {m.refLookup&&<span style={{marginLeft:2,color:C.amber,fontSize:12}}>⚠</span>}
+                    </div>
+                    <span style={{fontFamily:MONO,fontSize:10,color:C.text2}}>{m.srcType}</span>
+                    <span style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:m.required?C.red:C.text3}}>{m.required?"Required":"Optional"}</span>
+                    <span style={{fontFamily:FONT,fontSize:10,fontWeight:600,color:stateLabel.color,background:stateLabel.bg,border:`1px solid ${stateLabel.border}`,padding:"1px 5px",whiteSpace:"nowrap"}}>{stateLabel.label}</span>
+                    <select
+                      value={m.target}
+                      onChange={e=>updateMapping(i,"target",e.target.value)}
+                      style={{fontFamily:FONT,fontSize:12,background:C.bg0,border:`1px solid ${(!m.target&&m.required)?C.redBorder:dupTargets.includes(m.target)?C.amberBorder:C.border1}`,color:m.target?C.text0:C.text3,padding:"4px 6px",outline:"none",cursor:"pointer",width:"100%"}}
+                    >
+                      <option value="">— Select target —</option>
+                      {targetOpts.map(t=>{
+                        const [c,p]=t.split("::");
+                        return <option key={t} value={t}>{p}</option>;
+                      })}
+                    </select>
+                    <div style={{fontFamily:FONT,fontSize:11,color:targetCol?C.blue:C.text3,fontWeight:targetCol?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{targetCol||"—"}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 24px",borderTop:`1px solid ${C.border0}`,background:C.bg1,flexShrink:0,gap:10}}>
+          <button onClick={onBack} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"8px 20px",cursor:"pointer"}}>Back</button>
+          <button onClick={()=>onSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"8px 20px",cursor:"pointer"}}>Save as Draft</button>
+          <button
+            onClick={()=>onSave(true)}
+            disabled={unmappedRequired>0}
+            style={{background:unmappedRequired>0?C.bg2:C.blue,border:`1px solid ${unmappedRequired>0?C.border1:C.blueHover}`,color:unmappedRequired>0?C.text3:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"8px 24px",cursor:unmappedRequired>0?"not-allowed":"pointer"}}
+          >Publish Integration</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── ADD INTEGRATION DRAWER ───────────────────────────────────────────────────
 function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, webhooks, onAddWebhook }) {
   const [step,setStep]       = useState(1);
@@ -428,14 +798,23 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
   const [fetchState,setFetch]= useState("idle");
   const [published,setPublished] = useState(null);
   const [wbModal,setWbModal] = useState(false);
+  const [mappingOpen,setMappingOpen] = useState(false);
   const fetchTimer    = useRef(null);
   const postTestTimer = useRef(null);
 
   const set   = (k,v) => setForm(f=>({...f,[k]:v}));
   const touch = k     => setTouched(t=>({...t,[k]:true}));
+  function toggleBusinessObject(col) {
+    setForm(f=>{
+      const cur=f.businessObjects||[];
+      const next=cur.includes(col)?cur.filter(c=>c!==col):[...cur,col];
+      return {...f,businessObjects:next};
+    });
+    touch("businessObjects");
+  }
 
   useEffect(()=>{
-    if(open){ setStep(1);setForm(blankIntegrationForm());setErrors({});setTouched({});setAdvOpen(false);setValOpen(false);setFetch("idle");setPublished(null);setWbModal(false); }
+    if(open){ setStep(1);setForm(blankIntegrationForm());setErrors({});setTouched({});setAdvOpen(false);setValOpen(false);setFetch("idle");setPublished(null);setWbModal(false);setMappingOpen(false); }
   },[open]);
   useEffect(()=>{ if(system?.errorEmail) set("advErrorEmail",system.errorEmail); },[system]);
   useEffect(()=>()=>{ clearTimeout(fetchTimer.current); clearTimeout(postTestTimer.current); },[]);
@@ -458,12 +837,12 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     if(isInboundWebhook&&form.listenerEndpointUrl.trim()&&!isValidUrl(form.listenerEndpointUrl.trim())) e.listenerEndpointUrl="Must be a valid URL, e.g. https://hooks.company.com/inno-listener";
     if(isPolling&&!form.baseUrl.trim()) e.baseUrl="Base URL is required";
     if(isPolling&&form.baseUrl.trim()&&!isValidUrl(form.baseUrl.trim())) e.baseUrl="Must be a valid URL";
-    if(isInbound&&!form.product)        e.product="Select a product";
-    if(isInbound&&!form.businessObject) e.businessObject="Select a business object";
+    if(isInbound&&!form.product)                   e.product="Select a product";
+    if(isInbound&&form.product&&form.businessObjects.length===0) e.businessObjects="Select at least one collection";
     return e;
   }
   function handleNext() {
-    setTouched({name:true,direction:true,method:true,listenerEndpointUrl:true,baseUrl:true,product:true,businessObject:true});
+    setTouched({name:true,direction:true,method:true,listenerEndpointUrl:true,baseUrl:true,product:true,businessObjects:true});
     const e=validateStep1(); setErrors(e);
     if(Object.keys(e).length!==0) return;
     // If POST request was already tested successfully, pre-seed fetchState so Step 2 skips the pull step
@@ -512,7 +891,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     {label:"Integration name set", ok:!!form.name.trim()},
     {label:"Direction and method set", ok:!!form.direction&&!!form.method},
     {label:"Connection configured", ok:isPolling?isValidUrl(form.baseUrl):isInboundWebhook?isValidUrl(form.listenerEndpointUrl):isOutboundWebhook?!!form.selectedWebhookId:true},
-    {label:"Product and object set", ok:isOutbound?true:!!form.product&&!!form.businessObject},
+    {label:"Product and collections set", ok:isOutbound?true:!!form.product&&form.businessObjects.length>0},
     {label:"Required mappings complete", ok:isPolling?unmappedRequired===0:true},
     {label:"Runtime settings valid", ok:isPolling?!!form.frequency:true},
   ];
@@ -521,7 +900,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     const selectedWh = webhooks.find(w=>w.id===form.selectedWebhookId);
     const newInt={
       id:genId("int"), systemId:system?.id, name:form.name, direction:form.direction, method:form.method,
-      product:isInbound?form.product:null, businessObject:isInbound?form.businessObject:null,
+      product:isInbound?form.product:null, businessObjects:isInbound?form.businessObjects:[],
       frequency:isPolling?form.frequency:null,
       status:publish?"active":"draft", lastRunAt:null,
     };
@@ -551,7 +930,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
               {label:"Name",      value:published.name},
               {label:"Direction", value:published.direction==="inbound"?"Inbound to Innovapptive":"Outbound from Innovapptive"},
               {label:"Method",    value:published.method==="polling"?"Polling (Scheduled)":"Webhook (Real-time)"},
-              ...(published.product?[{label:"Product",value:published.product},{label:"Object",value:published.businessObject}]:[]),
+              ...(published.product?[{label:"Product",value:published.product},{label:"Collections",value:(published.businessObjects||[]).join(", ")||"—"}]:[]),
               {label:"Published", value:new Date(published.publishedAt).toLocaleString()},
             ].map(row=>(
               <div key={row.label} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.border0}`}}>
@@ -568,6 +947,18 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
         </div>
       </div>
     </>
+  );
+
+  // Polling mapping workspace — full-screen overlay
+  if(mappingOpen&&isPolling) return (
+    <MappingWorkspace
+      open={mappingOpen}
+      form={form}
+      setForm={setForm}
+      system={system}
+      onBack={()=>setMappingOpen(false)}
+      onSave={(publish)=>{ setMappingOpen(false); handleSave(publish); }}
+    />
   );
 
   return (
@@ -745,22 +1136,41 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                 </div>
               )}
 
-              {/* Product + Business Object — inbound only */}
+              {/* Product + Collections — inbound only, multi-select chips */}
               {form.method&&isInbound&&(
                 <div style={{marginBottom:22}}>
-                  <SectionRule label="Product & Object"/>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 14px"}}>
-                    <div>
-                      <FieldLabel label="Product" required/>
-                      <FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObject","");touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/>
-                      <FieldError msg={touched.product&&errors.product}/>
-                    </div>
-                    <div>
-                      <FieldLabel label="Business Object" required/>
-                      <FieldSelect value={form.businessObject} onChange={v=>{set("businessObject",v);touch("businessObject");}} options={form.product?PRODUCT_OBJECTS[form.product]:[]} placeholder={form.product?"— Select object —":"Select product first"} disabled={!form.product} error={touched.businessObject&&errors.businessObject}/>
-                      <FieldError msg={touched.businessObject&&errors.businessObject}/>
-                    </div>
+                  <SectionRule label="Product & Collections"/>
+                  <div style={{marginBottom:12}}>
+                    <FieldLabel label="Product" required/>
+                    <FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObjects",[]);touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/>
+                    <FieldError msg={touched.product&&errors.product}/>
                   </div>
+                  {form.product&&(
+                    <div>
+                      <FieldLabel label="Collections" required helper="Select all object types this integration maps to"/>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+                        {(PRODUCT_OBJECTS[form.product]||[]).map(col=>{
+                          const active=(form.businessObjects||[]).includes(col);
+                          return (
+                            <button key={col} onClick={()=>toggleBusinessObject(col)} style={{
+                              padding:"5px 12px",fontFamily:FONT,fontSize:12,fontWeight:active?700:400,
+                              cursor:"pointer",border:`1px solid ${active?C.blue:C.border1}`,
+                              background:active?C.blueBg:C.bg0,color:active?C.blue:C.text1,
+                              display:"flex",alignItems:"center",gap:5,
+                            }}>
+                              {active&&<span style={{fontSize:9,fontWeight:900}}>✓</span>}{col}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {touched.businessObjects&&errors.businessObjects&&<FieldError msg={errors.businessObjects}/>}
+                      {(form.businessObjects||[]).length>0&&(
+                        <div style={{marginTop:8,fontFamily:FONT,fontSize:11,color:C.text3}}>
+                          {form.businessObjects.length} collection{form.businessObjects.length!==1?"s":""} selected
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -853,113 +1263,40 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     </div>
                   </div>
 
-                  {/* Data Mapping */}
+                  {/* Data Mapping — entry point to full-screen workspace */}
                   <div style={{marginBottom:20}}>
                     <SectionRule label="Data Mapping"/>
-                    <div style={{background:C.bg1,border:`1px solid ${C.border0}`,padding:"14px 14px 10px",marginBottom:12}}>
-                      <div style={{fontFamily:FONT,fontSize:11,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:10}}>Sample source</div>
-                      <div style={{display:"flex",gap:0,marginBottom:12}}>
-                        {[{k:"pull",label:"Pull from endpoint"},{k:"paste",label:"Paste JSON"}].map(tab=>(
-                          <button key={tab.k} onClick={()=>set("sampleMode",tab.k)} style={{flex:1,padding:"6px 10px",background:form.sampleMode===tab.k?C.bg0:"transparent",border:`1px solid ${C.border0}`,borderBottom:form.sampleMode===tab.k?`2px solid ${C.blue}`:"1px solid transparent",fontFamily:FONT,fontSize:12,fontWeight:form.sampleMode===tab.k?700:400,color:form.sampleMode===tab.k?C.blue:C.text2,cursor:"pointer"}}>{tab.label}</button>
-                        ))}
-                      </div>
-                      {form.sampleMode==="pull"&&(
-                        <div>
-                          {form.httpMethod==="POST"&&form.postTestState==="success"?(
-                            <InfoBox variant="green">Sample already received from the POST test in Step 1. The mapping table below is pre-populated — you can proceed directly.</InfoBox>
-                          ):(
-                            <>
-                              <div style={{marginBottom:10,display:"flex",alignItems:"center",gap:6,padding:"5px 8px",background:C.tealBg,border:`1px solid ${C.tealBorder}`}}>
-                                <span style={{color:C.teal,fontSize:11}}>ℹ</span>
-                                <span style={{fontFamily:FONT,fontSize:11,color:C.teal}}>Pulling from: <MonoText size={11} color={C.teal}>{form.baseUrl||"(Base URL from Step 1)"}</MonoText></span>
-                              </div>
-                              <button onClick={handleFetchSample} disabled={fetchState==="loading"||!form.baseUrl} style={{background:fetchState==="done"?C.greenBg:C.bg0,border:`1px solid ${fetchState==="done"?C.greenBorder:C.border1}`,color:fetchState==="done"?C.green:(!form.baseUrl?C.text3:C.blue),fontFamily:FONT,fontSize:12,fontWeight:600,padding:"6px 14px",cursor:(fetchState==="loading"||!form.baseUrl)?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,opacity:!form.baseUrl?0.5:1}}>
-                                {fetchState==="loading"?<><Spinner size={12}/><span>Pulling sample…</span></>:fetchState==="done"?"✓ Sample pulled — re-pull":"▶ Test call / pull sample"}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                      {form.sampleMode==="paste"&&(
-                        <div>
-                          <FieldLabel label="Paste JSON sample" helper="One representative record from the external system"/>
-                          <FieldTextarea value={form.sampleJson} onChange={v=>{set("sampleJson",v);set("sampleFetched",!!v.trim());if(v.trim())set("schemaSummary",{recordsReturned:1,fieldsDetected:SAMPLE_FIELDS.length,nestedObjects:4,arraysDetected:1,referenceLikeFields:2,pulledAt:new Date().toISOString()});}} placeholder={'{\n  "id": "OBS-1042",\n  ...\n}'} rows={5} mono/>
-                        </div>
-                      )}
-                    </div>
-                    {form.schemaSummary&&(
-                      <div style={{background:C.bg1,border:`1px solid ${C.border0}`,borderLeft:`3px solid ${C.green}`,padding:"10px 14px",marginBottom:12}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                          <span style={{fontFamily:FONT,fontSize:11,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.09em"}}>Schema summary</span>
-                          <span style={{fontFamily:MONO,fontSize:10,color:C.text3}}>Pulled {new Date(form.schemaSummary.pulledAt).toLocaleTimeString()}</span>
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"4px 12px"}}>
-                          {[{label:"Fields",val:form.schemaSummary.fieldsDetected},{label:"Nested",val:form.schemaSummary.nestedObjects},{label:"Arrays",val:form.schemaSummary.arraysDetected},{label:"Ref-like",val:form.schemaSummary.referenceLikeFields}].map(s=>(
-                            <div key={s.label} style={{display:"flex",alignItems:"baseline",gap:4}}><span style={{fontFamily:FONT,fontSize:16,fontWeight:700,color:C.text0}}>{s.val}</span><span style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{s.label}</span></div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {(fetchState==="done"||form.sampleJson.trim())&&(
-                      <>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                          <button onClick={handleAutoMap} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,color:C.blue,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer"}}>⚡ Auto Map</button>
-                          <button onClick={handleValidate} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer"}}>✓ Validate</button>
-                          {form.validationResult&&<span style={{fontFamily:MONO,fontSize:10,color:C.text3}}>Validated {new Date(form.validationResult.ranAt).toLocaleTimeString()}</span>}
-                          <div style={{flex:1}}/>
-                          {form.fieldMappings.filter(m=>m.target).length===0?<span style={{fontFamily:FONT,fontSize:11,color:C.text3}}>No fields mapped yet</span>:<span style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{form.fieldMappings.filter(m=>m.target).length} of {form.fieldMappings.length} mapped</span>}
-                        </div>
-                        {unmappedRequired>0&&<div style={{marginBottom:8}}><InfoBox variant="amber">{unmappedRequired} required field{unmappedRequired>1?"s are":" is"} not yet mapped.</InfoBox></div>}
-                        {dupTargets.length>0&&<div style={{marginBottom:8}}><InfoBox variant="amber">Duplicate target: <strong>{dupTargets.join(", ")}</strong></InfoBox></div>}
-                        <div style={{border:`1px solid ${C.border0}`,marginBottom:10}}>
-                          <div style={{display:"grid",gridTemplateColumns:"minmax(140px,1.4fr) 62px 76px 86px minmax(130px,1fr)",background:C.bg2,padding:"6px 10px",borderBottom:`1px solid ${C.border0}`}}>
-                            {["External Field","Type","Required","Status","Innovapptive Field"].map(h=><div key={h} style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>)}
-                          </div>
-                          {form.fieldMappings.map((m,i)=>{
-                            const rowBg=m.rowState==="auto-mapped"?"#F5FAF7":(!m.target&&m.required)?"#FFF8F8":i%2===0?C.bg0:C.bg1;
-                            const stateLabel={"auto-mapped":{label:"Auto-mapped",color:C.green,bg:C.greenBg,border:C.greenBorder},"manual":{label:"Manual",color:C.blue,bg:C.blueBg,border:C.blueBorder},"ref-lookup":{label:"Ref lookup",color:C.amber,bg:C.amberBg,border:C.amberBorder},"needs-review":{label:"Needs review",color:C.red,bg:C.redBg,border:C.redBorder},"unmapped":{label:"—",color:C.text3,bg:"transparent",border:"transparent"}}[m.rowState]||{label:"—",color:C.text3,bg:"transparent",border:"transparent"};
-                            return (
-                              <div key={m.src} style={{display:"grid",gridTemplateColumns:"minmax(140px,1.4fr) 62px 76px 86px minmax(130px,1fr)",padding:"6px 10px",borderBottom:i<form.fieldMappings.length-1?`1px solid ${C.border0}`:"none",background:rowBg,alignItems:"center"}}>
-                                <div style={{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}}>
-                                  <MonoText size={11} color={C.text0}>{m.src}</MonoText>
-                                  {m.nested&&<span style={{fontSize:9,color:C.text3,background:C.bg2,border:`1px solid ${C.border0}`,padding:"0 3px"}}>nested</span>}
-                                  {m.arrayPath&&<span style={{fontSize:9,color:C.purple,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,padding:"0 3px"}}>array</span>}
-                                  {m.refLookup&&<span style={{marginLeft:2,color:C.amber,fontSize:12}}>⚠</span>}
+                    {(()=>{
+                      const mapped=form.fieldMappings.filter(m=>m.target).length;
+                      const reqUnmapped=form.fieldMappings.filter(m=>m.required&&!m.target).length;
+                      const hasMapping=mapped>0;
+                      return (
+                        <div style={{background:C.bg1,border:`1px solid ${hasMapping?(reqUnmapped===0?C.greenBorder:C.amberBorder):C.border0}`,borderLeft:`3px solid ${hasMapping?(reqUnmapped===0?C.green:C.amber):C.border1}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
+                          <div style={{flex:1}}>
+                            {hasMapping?(
+                              <>
+                                <div style={{fontFamily:FONT,fontSize:13,fontWeight:700,color:C.text0,marginBottom:3}}>
+                                  {mapped} of {form.fieldMappings.length} fields mapped
                                 </div>
-                                <span style={{fontFamily:MONO,fontSize:10,color:C.text2}}>{m.srcType}</span>
-                                <span style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:m.required?C.red:C.text3}}>{m.required?"Required":"Optional"}</span>
-                                <span style={{fontFamily:FONT,fontSize:10,fontWeight:600,color:stateLabel.color,background:stateLabel.bg,border:`1px solid ${stateLabel.border}`,padding:"1px 5px",whiteSpace:"nowrap"}}>{stateLabel.label}</span>
-                                <select value={m.target} onChange={e=>updateMapping(i,"target",e.target.value)} style={{fontFamily:FONT,fontSize:12,background:C.bg0,border:`1px solid ${(!m.target&&m.required)?C.redBorder:dupTargets.includes(m.target)?C.amberBorder:C.border1}`,color:m.target?C.text0:C.text3,padding:"4px 6px",outline:"none",cursor:"pointer",width:"100%"}}>
-                                  <option value="">— Select target —</option>
-                                  {TARGET_FIELDS.filter(t=>t!=="— Select target —").map(t=><option key={t} value={t}>{t}</option>)}
-                                </select>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <button onClick={()=>setValOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:`1px solid ${C.border0}`,width:"100%",padding:"7px 10px",cursor:"pointer",fontFamily:FONT,fontSize:12,fontWeight:600,color:C.text1,marginBottom:valOpen?0:14}}>
-                          <span style={{color:C.text3,fontSize:11}}>{valOpen?"▼":"▶"}</span> Validation summary
-                          {form.validationResult?(form.validationResult.unmappedRequired>0||form.validationResult.duplicateTargets>0?<span style={{background:C.amberBg,border:`1px solid ${C.amberBorder}`,fontSize:11,color:C.amber,padding:"1px 7px",fontWeight:700,marginLeft:"auto"}}>Issues found</span>:<span style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:11,color:C.green,padding:"1px 7px",fontWeight:700,marginLeft:"auto"}}>Valid</span>):<span style={{fontFamily:FONT,fontSize:11,color:C.text3,fontWeight:400,marginLeft:"auto"}}>Run Validate first</span>}
-                        </button>
-                        {valOpen&&(
-                          <div style={{background:C.bg1,border:`1px solid ${C.border0}`,borderTop:"none",padding:"10px 12px",marginBottom:14}}>
-                            {form.validationResult?[
-                              {label:"Required fields mapped",ok:form.validationResult.unmappedRequired===0,detail:`${form.validationResult.requiredMapped} / ${form.validationResult.requiredTotal}`},
-                              {label:"Optional fields skipped",ok:true,detail:`${form.validationResult.optionalSkipped} unmapped`},
-                              {label:"Type conflicts",ok:form.validationResult.typeConflicts===0,detail:form.validationResult.typeConflicts>0?`${form.validationResult.typeConflicts} conflict(s)`:"None"},
-                              {label:"Duplicate targets",ok:form.validationResult.duplicateTargets===0,detail:form.validationResult.duplicateTargets>0?`${form.validationResult.duplicateTargets} duplicate(s)`:"None"},
-                              {label:"Reference lookups",ok:true,detail:form.validationResult.refLookups>0?`${form.validationResult.refLookups} field(s) — review manually`:"None"},
-                            ].map(row=>(
-                              <div key={row.label} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${C.border0}`}}>
-                                <span style={{color:row.ok?C.green:C.amber,fontSize:13,fontWeight:700,width:16,flexShrink:0}}>{row.ok?"✓":"!"}</span>
-                                <span style={{fontFamily:FONT,fontSize:12,color:C.text0,flex:1}}>{row.label}</span>
-                                <span style={{fontFamily:FONT,fontSize:11,color:row.ok?C.text2:C.amber,fontWeight:row.ok?400:600}}>{row.detail}</span>
-                              </div>
-                            )):<div style={{fontFamily:FONT,fontSize:12,color:C.text3,padding:"8px 0"}}>Click Validate above to check mappings.</div>}
+                                {reqUnmapped>0?(
+                                  <div style={{fontFamily:FONT,fontSize:11,color:C.amber}}>{reqUnmapped} required field{reqUnmapped!==1?"s":""} still unmapped — open workspace to complete.</div>
+                                ):(
+                                  <div style={{fontFamily:FONT,fontSize:11,color:C.green}}>All required fields mapped.</div>
+                                )}
+                              </>
+                            ):(
+                              <>
+                                <div style={{fontFamily:FONT,fontSize:13,fontWeight:600,color:C.text0,marginBottom:3}}>No fields mapped yet</div>
+                                <div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>Open the mapping workspace to connect source fields to target paths.</div>
+                              </>
+                            )}
                           </div>
-                        )}
-                      </>
-                    )}
+                          <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:700,padding:"7px 16px",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                            {hasMapping?"Edit Mapping →":"Configure Mapping →"}
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Runtime */}
@@ -1016,7 +1353,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     {label:"Name",     value:form.name||"—"},
                     {label:"Direction",value:form.direction==="inbound"?"↓ Inbound":form.direction==="outbound"?"↑ Outbound":"—"},
                     {label:"Method",   value:form.method==="polling"?"Polling (Scheduled)":form.method==="webhook"?"Webhook (Real-time)":"—"},
-                    ...(isInbound?[{label:"Product",value:form.product||"—"},{label:"Object",value:form.businessObject||"—"}]:[]),
+                    ...(isInbound?[{label:"Product",value:form.product||"—"},{label:"Collections",value:(form.businessObjects||[]).join(", ")||"—"}]:[]),
                     {label:"How this runs",value:isWebhook?"Real-time":form.frequency||"Scheduled"},
                   ].map((row,i,arr)=>(
                     <div key={row.label} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:i<arr.length-1?`1px solid ${C.border0}`:"none"}}>
@@ -1046,7 +1383,14 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
               <button onClick={()=>handleSave(true)} disabled={!form.selectedWebhookId} title={!form.selectedWebhookId?"Select or create a webhook above":""} style={{background:form.selectedWebhookId?C.blue:C.bg2,border:`1px solid ${form.selectedWebhookId?C.blueHover:C.border0}`,color:form.selectedWebhookId?"#fff":C.text3,fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:form.selectedWebhookId?"pointer":"not-allowed"}}>Publish Integration</button>
             </>
           )}
-          {step===2&&(
+          {step===2&&isPolling&&(
+            <>
+              <button onClick={()=>setStep(1)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 14px",cursor:"pointer"}}>← Back</button>
+              <button onClick={()=>handleSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 16px",cursor:"pointer"}}>Save as Draft</button>
+              <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Configure Mapping & Publish →</button>
+            </>
+          )}
+          {step===2&&!isPolling&&(
             <>
               <button onClick={()=>setStep(1)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 14px",cursor:"pointer"}}>← Back</button>
               <button onClick={()=>handleSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 16px",cursor:"pointer"}}>Save as Draft</button>
@@ -1178,12 +1522,13 @@ function EditSystemDrawer({ open, system, onClose, onSave }) {
 // ─── EDIT INTEGRATION DRAWER ─────────────────────────────────────────────────
 function EditIntegrationDrawer({ open, integration, system, onClose, onSave }) {
   const [form,setForm]=useState(null); const [errors,setErrors]=useState({}); const [touched,setTouched]=useState({}); const [saved,setSaved]=useState(false);
-  useEffect(()=>{if(open&&integration){setForm({name:integration.name,product:integration.product||"",businessObject:integration.businessObject||"",triggerOn:"Always",failureBehavior:"Auto-retry 3x then DLQ",frequency:integration.frequency||"Every 15 min",startTime:"06:00"});setErrors({});setTouched({});setSaved(false);}},[open,integration]);
+  useEffect(()=>{if(open&&integration){setForm({name:integration.name,product:integration.product||"",businessObjects:integration.businessObjects||[],triggerOn:"Always",failureBehavior:"Auto-retry 3x then DLQ",frequency:integration.frequency||"Every 15 min",startTime:"06:00"});setErrors({});setTouched({});setSaved(false);}},[open,integration]);
   if(!open||!form||!integration) return null;
   const set=(k,v)=>setForm(f=>({...f,[k]:v})); const touch=k=>setTouched(t=>({...t,[k]:true}));
   const isInbound=integration.direction==="inbound";
-  function validate(){const e={};if(!form.name.trim())e.name="Required";if(isInbound&&!form.product)e.product="Required";if(isInbound&&!form.businessObject)e.businessObject="Required";return e;}
-  function handleSave(){setTouched({name:true,product:true,businessObject:true});const e=validate();setErrors(e);if(Object.keys(e).length>0)return;onSave({...integration,name:form.name.trim(),product:isInbound?form.product:null,businessObject:isInbound?form.businessObject:null,frequency:integration.method==="polling"?form.frequency:null});setSaved(true);setTimeout(onClose,900);}
+  function toggleBO(col){ const cur=form.businessObjects||[]; set("businessObjects",cur.includes(col)?cur.filter(c=>c!==col):[...cur,col]); touch("businessObjects"); }
+  function validate(){const e={};if(!form.name.trim())e.name="Required";if(isInbound&&!form.product)e.product="Required";if(isInbound&&(form.businessObjects||[]).length===0)e.businessObjects="Select at least one";return e;}
+  function handleSave(){setTouched({name:true,product:true,businessObjects:true});const e=validate();setErrors(e);if(Object.keys(e).length>0)return;onSave({...integration,name:form.name.trim(),product:isInbound?form.product:null,businessObjects:isInbound?form.businessObjects:[],frequency:integration.method==="polling"?form.frequency:null});setSaved(true);setTimeout(onClose,900);}
   return (
     <>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,25,35,0.30)",zIndex:200}}/>
@@ -1204,9 +1549,18 @@ function EditIntegrationDrawer({ open, integration, system, onClose, onSave }) {
             <div style={{marginTop:8,fontFamily:FONT,fontSize:11,color:C.text3}}>Direction and method cannot be changed after creation.</div>
           </div>
           <div style={{marginBottom:14}}><FieldLabel label="Integration Name" required/><FieldInput value={form.name} onChange={v=>{set("name",v);touch("name");}} placeholder="Integration name" error={touched.name&&errors.name}/><FieldError msg={touched.name&&errors.name}/></div>
-          {isInbound&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 14px",marginBottom:14}}>
-            <div><FieldLabel label="Product" required/><FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObject","");touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/><FieldError msg={touched.product&&errors.product}/></div>
-            <div><FieldLabel label="Business Object" required/><FieldSelect value={form.businessObject} onChange={v=>{set("businessObject",v);touch("businessObject");}} options={form.product?PRODUCT_OBJECTS[form.product]:[]} placeholder={form.product?"— Select object —":"Select product first"} disabled={!form.product} error={touched.businessObject&&errors.businessObject}/><FieldError msg={touched.businessObject&&errors.businessObject}/></div>
+          {isInbound&&<div style={{marginBottom:14}}>
+            <div style={{marginBottom:10}}><FieldLabel label="Product" required/><FieldSelect value={form.product} onChange={v=>{set("product",v);set("businessObjects",[]);touch("product");}} options={PRODUCTS} placeholder="— Select product —" error={touched.product&&errors.product}/><FieldError msg={touched.product&&errors.product}/></div>
+            {form.product&&<div>
+              <FieldLabel label="Collections" required helper="Select all object types in this integration"/>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+                {(PRODUCT_OBJECTS[form.product]||[]).map(col=>{
+                  const active=(form.businessObjects||[]).includes(col);
+                  return <button key={col} onClick={()=>toggleBO(col)} style={{padding:"4px 10px",fontFamily:FONT,fontSize:12,fontWeight:active?700:400,cursor:"pointer",border:`1px solid ${active?C.blue:C.border1}`,background:active?C.blueBg:C.bg0,color:active?C.blue:C.text1,display:"flex",alignItems:"center",gap:4}}>{active&&<span style={{fontSize:9,fontWeight:900}}>✓</span>}{col}</button>;
+                })}
+              </div>
+              {touched.businessObjects&&errors.businessObjects&&<FieldError msg={errors.businessObjects}/>}
+            </div>}
           </div>}
           {integration.method==="polling"&&<div style={{marginBottom:14}}>
             <SectionRule label="How this runs"/>
@@ -1359,7 +1713,7 @@ function FlowStrip({ system, integrations }) {
         const isIn=intg.direction==="inbound";
         const src=isIn?system.name:"Innovapptive";
         const dst=isIn?(intg.product||"Innovapptive"):system.name;
-        const obj=intg.businessObject||(intg.method==="webhook"?"events":"data");
+        const obj=(intg.businessObjects||[])[0]||(intg.method==="webhook"?"events":"data");
         return (
           <div key={intg.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderBottom:i<shown.length-1?`1px solid ${C.border0}`:"none",borderLeft:`3px solid ${isIn?C.teal:C.purple}`}}>
             <span style={{fontFamily:FONT,fontSize:12,fontWeight:700,color:C.text0,minWidth:120,flexShrink:0}}>{src}</span>
@@ -1406,7 +1760,7 @@ function IntegrationCard({ integration, systemName, onEdit, onDisable }) {
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",background:C.bg1,border:`1px solid ${C.border0}`,padding:"8px 0"}}>
         {[
           {label:"Product",  value:integration.product||"—",  muted:!integration.product},
-          {label:"Object",   value:integration.businessObject||"—", muted:!integration.businessObject},
+          {label:"Collections", value:(integration.businessObjects||[]).join(", ")||"—", muted:!(integration.businessObjects||[]).length},
           {label:"How this runs", value:runtimeLabel},
           {label:lastLabel,  value:integration.lastRunAt?new Date(integration.lastRunAt).toLocaleString():"Never", muted:!integration.lastRunAt},
         ].map((row,i,arr)=>(
