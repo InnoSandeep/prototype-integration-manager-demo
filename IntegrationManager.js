@@ -657,8 +657,11 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave }) {
     });
   }
   function updateSrc(idx, newSrc) {
-    const sf = SAMPLE_FIELDS.find(f=>f.src===newSrc)||{src:newSrc,srcType:"string",required:false,refLookup:false,nested:newSrc.includes("."),arrayPath:newSrc.includes("[]")};
-    setForm(f=>{ const m=[...f.fieldMappings]; m[idx]={...m[idx],...sf,target:"",rowState:"unmapped"}; return {...f,fieldMappings:m}; });
+    const sf = SAMPLE_FIELDS.find(f=>f.src===newSrc)||{src:newSrc,srcType:"string",refLookup:false,nested:newSrc.includes("."),arrayPath:newSrc.includes("[]")};
+    // Preserve row.required — it reflects the target's constraint, not the source field's metadata.
+    // Spreading sf without required ensures the mandatory mapping gate can't be bypassed by swapping sources.
+    const { required: _ignored, ...srcMeta } = sf;
+    setForm(f=>{ const m=[...f.fieldMappings]; m[idx]={...m[idx],...srcMeta,target:"",rowState:"unmapped"}; return {...f,fieldMappings:m}; });
   }
 
   function handleFetchSample() {
