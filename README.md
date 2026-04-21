@@ -57,9 +57,10 @@ Deployed to **GitHub Pages** via GitHub Actions on every push to `main`.
 Workflow file: `.github/workflows/deploy.yml`
 
 - Triggered on: push to `main` or manual `workflow_dispatch`
-- Environment: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
 - Steps: checkout → configure-pages → upload-artifact (whole repo) → deploy-pages
 - No manual steps required after merge
+
+**Node.js version note:** The workflow includes `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` which forces all actions to run on Node 24 even when their binaries were compiled targeting Node 20. This produces a non-blocking annotation in GitHub Actions ("Node.js 20 is deprecated") but the deployment succeeds. The annotation will disappear once the upstream GitHub-owned actions (`checkout`, `configure-pages`, `upload-pages-artifact`, `deploy-pages`) release versions that natively target Node 24 — at which point the `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` line can be removed.
 
 ---
 
@@ -157,14 +158,14 @@ All static data is defined as constants at the top of `IntegrationManager.js`.
 Maps each Innovapptive product to its list of available collections (business object types). Used to populate the Collections multi-select dropdown when creating or editing an inbound integration.
 
 ```
-iMaintenance → Work Order, Notification, Operation, Component, Equipment,
-               Functional Location, Measurement Point, Work Log, Attachment,
+iMaintenance → Observation, Work Order, Notification, Measurement Point, Work Log,
+               Operation, Component, Equipment, Functional Location, Attachment,
                Failure Reporting
-mRounds      → Round, Round Plan, Asset, Location, Task, Issue, Action, Assignment
-mInventory   → Material, Plant, Storage Location, Storage Bin, Stock, Reservation,
-               Goods Receipt, Goods Issue, Transfer Posting, Cycle Count, Label
-EHS          → Incident, Observation, Action, Permit, Risk Assessment, Audit, JHA
-Platform     → Transition Compound Object, External System, Audit
+mRounds      → Round, Issue, Task, Action, Round Plan, Asset, Location, Assignment
+mInventory   → Material, Goods Receipt, Goods Issue, Plant, Storage Location,
+               Storage Bin, Stock, Reservation, Transfer Posting, Cycle Count, Label
+EHS          → Observation, Incident, Action, Permit, Risk Assessment, Audit, JHA
+Platform     → External System, Transition Compound Object, Audit
 ```
 
 ### `SAMPLE_FIELDS`
@@ -190,23 +191,34 @@ The simulated source payload schema — 12 fields representing a typical externa
 
 Hierarchical target field definitions used by the Mapping Workspace. Structure: `product → collection → [{ path, type, required, array? }]`
 
-Currently populated for:
-
 **iMaintenance**
 - `Observation` — 14 fields (id, observation_time, asset.id, asset.name, asset.location.site, measurements[].value, measurements[].unit, severity, description, work_order_ref, source_system, schema_version, created_by, status)
 - `Work Order` — 10 fields (id, title, asset.id, asset.name, priority, plannedStart, plannedEnd, status, assignee.id, description)
 - `Notification` — 6 fields (id, type, asset.id, message, priority, created_at)
+- `Measurement Point` — 8 fields (id, asset.id, characteristic, value, unit, measured_at, source_system, status)
+- `Work Log` — 7 fields (id, work_order.id, performed_at, performed_by.id, duration_minutes, description, status)
 
 **EHS**
 - `Observation` — 9 fields (id, observation_time, location.site, location.area, observer.id, category, severity, description, status)
 - `Incident` — 8 fields (id, occurred_at, location.site, type, severity, description, involved_parties[].id, status)
 - `Action` — 5 fields (id, title, due_date, assignee.id, status)
+- `Permit` — 8 fields (id, type, location.site, issued_at, expires_at, issued_to.id, description, status)
+- `Risk Assessment` — 8 fields (id, title, location.site, assessed_at, assessed_by.id, severity, description, status)
 
 **mRounds**
 - `Round` — 5 fields (id, name, scheduled_at, status, assignee.id)
 - `Issue` — 7 fields (id, title, asset.id, severity, description, created_at, status)
+- `Task` — 7 fields (id, title, asset.id, due_at, assignee.id, description, status)
+- `Action` — 6 fields (id, title, due_date, assignee.id, description, status)
 
-**Not yet populated:** mInventory, Platform
+**mInventory**
+- `Material` — 8 fields (id, description, plant.id, material_type, unit_of_measure, base_unit, source_system, status)
+- `Goods Receipt` — 8 fields (id, material.id, plant.id, quantity, unit_of_measure, posting_date, reference_document, status)
+- `Goods Issue` — 8 fields (id, material.id, plant.id, quantity, unit_of_measure, posting_date, cost_center, status)
+
+**Platform**
+- `External System` — 6 fields (id, name, type, endpoint_url, description, status)
+- `Transition Compound Object` — 7 fields (id, source_id, source_system, object_type, payload, created_at, status)
 
 ### `AUTO_MAP_RULES`
 
@@ -674,6 +686,8 @@ Full-screen `position: fixed` overlay (z-index 211) that replaces the drawer for
 
 All state resets when `open` becomes false.
 
+**`formRef`:** A `useRef` that is set to `form` on every render (`formRef.current = form`). This gives `setTimeout` callbacks (Auto Map, Validate) access to the latest form state without a stale closure and without side effects inside state updater functions — necessary because React 18 with `createRoot` batches state updates asynchronously.
+
 **Computed values:**
 - `collections` = `form.businessObjects`
 - `targetOpts` = array of `{ value: "Col::path", label: "Col.path" }` for all fields across all selected collections in `NESTED_TARGET_SCHEMA[product]`
@@ -707,8 +721,8 @@ All state resets when `open` becomes false.
 **Right panel — Toolbar + Validation panel + Mapping table:**
 
 **Toolbar:**
-- `AIActionButton` "Auto Map" — simulates 1.2s async mapping. Iterates over `fieldMappings`, looks up each `m.src` in `AUTO_MAP_RULES`, then checks if the rule's target path exists in any selected collection's `NESTED_TARGET_SCHEMA`. Sets `target = "Col::target_path"` and `rowState = "auto-mapped"`. Only maps rows that don't already have a target.
-- `AIActionButton` "Validate" — simulates 1s async validation. Counts required mapped, optional skipped, type conflicts (always 0 in prototype), ref lookups, and duplicate targets. Stores result in `form.validationResult`. Supports Show/Hide toggle.
+- `AIActionButton` "Auto Map" — simulates 1.2s async mapping. Reads current form state from `formRef` (avoids stale closures and updater side effects). For each unmapped row, looks up `m.src` in `AUTO_MAP_RULES`, then checks if the suggested path exists in any selected collection's `NESTED_TARGET_SCHEMA`. Sets `target = "Col::target_path"` and `rowState = "auto-mapped"`. Reports only the count of rows newly mapped this run.
+- `AIActionButton` "Validate" — simulates 1s async validation. Checks: required fields mapped, duplicate targets, real type conflicts (compares `srcType` to the target field's `type` in `NESTED_TARGET_SCHEMA`; allows compatible pairings: `url→string`, `datetime→date`), and ref-lookup count. Stores result in `form.validationResult`. Issues count = unmapped required + duplicates + type conflicts. Supports Show/Hide toggle.
 - Duplicate target warning badge (amber) if any target appears on multiple rows
 - Filter input: filters rows by `src` or `target` text
 
@@ -735,7 +749,7 @@ Target dropdown border: red when required+unmapped, amber when duplicate.
 
 **`updateMapping(idx, key, val)`:** Updates `target` (or other keys). Sets `rowState` to `"auto-mapped"` if it was already auto-mapped, `"manual"` if it now has a target, `"unmapped"` if target cleared.
 
-**Footer:** Publish button is `disabled` and grayed-out when `!mappingComplete`. Title attribute shows `mappingStatus.label` as tooltip when disabled.
+**Footer:** Back / Save as Draft / Publish Integration buttons only. The `mappingStatus` badge is shown only in the header (not duplicated in the footer). Publish button is `disabled` and grayed-out when `!mappingComplete`. Hovering the disabled button shows `mappingStatus.label` as a tooltip.
 
 ---
 
@@ -917,8 +931,8 @@ No Step 2. No mapping required.
 | Payload field tree — collapsible groups, type/required badges | ✅ |
 | Source field dropdown per mapping row | ✅ |
 | Target dropdown — Collection.path format, per-collection schema | ✅ |
-| Auto Map (AI-simulated, rule-based) | ✅ |
-| Validate (checks required, duplicates, ref lookups) | ✅ |
+| Auto Map (AI-simulated, rule-based, correctly counts newly-mapped this run) | ✅ |
+| Validate (checks required, duplicates, real type conflicts, ref lookups) | ✅ |
 | Filter mapping rows by field name | ✅ |
 | Mandatory mapping gate — Publish disabled until complete | ✅ |
 | Required-field preservation on source edits (security fix) | ✅ |
@@ -940,10 +954,10 @@ No Step 2. No mapping required.
 
 | Area | Status |
 |---|---|
-| `NESTED_TARGET_SCHEMA` for mInventory and Platform | Not yet populated — target dropdowns will be empty for these products |
-| Multi-collection mapping — deduplication / grouping of targets across collections | Schema lookup works, but cross-collection grouping in the table is not implemented |
+| Multi-collection mapping — deduplication / grouping of targets across collections | Schema lookup works for all products, but cross-collection grouping in the table is not implemented |
 | Edit Mapping post-publish | Stubbed as "Coming Soon" on publish success screen |
 | Replay / Discard in DLQ | Buttons rendered but not wired |
 | Validation panel — richer diff-style review view | Currently shows a basic metrics row; a detailed diff view is planned |
 | File Import / File Export methods | Rendered as disabled "Coming Soon" cards in method selection |
 | Workflows and My Approvals nav links | Rendered but not navigable |
+| GitHub Actions Node 20 deprecation warning | Non-blocking — `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` already forces Node 24 at runtime. Will be resolved once upstream actions (`checkout`, `configure-pages`, `upload-pages-artifact`, `deploy-pages`) release versions that natively target Node 24 |
