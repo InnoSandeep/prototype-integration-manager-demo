@@ -918,6 +918,10 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave }) {
   const [filterText, setFilterText]         = useState("");
   const [collapsedGrps, setCollapsedGrps]   = useState({});
   const fetchTimer = useRef(null);
+  // Always holds the latest form value so setTimeout callbacks can read current
+  // state without a stale closure and without needing side effects inside updaters.
+  const formRef = useRef(form);
+  formRef.current = form;
 
   useEffect(()=>{
     if(!open){
@@ -998,23 +1002,24 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave }) {
   function handleAutoMap() {
     setAutoMapRunning(true); setAutoMapResult(null);
     setTimeout(()=>{
-      // Count newly mapped inside the updater so we read fresh state, not the stale closure.
-      let newlyMapped = 0;
-      setForm(f=>{
-        const updated = f.fieldMappings.map(m=>{
-          const rule = AUTO_MAP_RULES[m.src];
-          if(!rule||m.target) return m.target?{...m,rowState:"manual"}:m;
-          let matched = null;
-          for(const col of (f.businessObjects||[])){
-            const fields = NESTED_TARGET_SCHEMA[f.product]?.[col]||[];
-            if(fields.some(fd=>fd.path===rule)){ matched=`${col}::${rule}`; break; }
-          }
-          if(matched){ newlyMapped++; return {...m,target:matched,rowState:"auto-mapped"}; }
-          return m;
-        });
-        return {...f,fieldMappings:updated};
+      // Read latest state from ref — avoids stale closure without needing side effects
+      // inside the setForm updater (which React 18 may invoke asynchronously or
+      // more than once in Strict Mode, making mutable counters unreliable).
+      const f = formRef.current;
+      const updated = f.fieldMappings.map(m=>{
+        const rule = AUTO_MAP_RULES[m.src];
+        if(!rule||m.target) return m.target?{...m,rowState:"manual"}:m;
+        let matched = null;
+        for(const col of (f.businessObjects||[])){
+          const fields = NESTED_TARGET_SCHEMA[f.product]?.[col]||[];
+          if(fields.some(fd=>fd.path===rule)){ matched=`${col}::${rule}`; break; }
+        }
+        return matched ? {...m,target:matched,rowState:"auto-mapped"} : m;
       });
-      setAutoMapResult(`${newlyMapped} field${newlyMapped!==1?"s":""} mapped`);
+      // Pure derivation: rows that moved from unmapped → auto-mapped this run.
+      const n = updated.filter((m,i)=>m.rowState==="auto-mapped"&&!f.fieldMappings[i].target).length;
+      setForm(prev=>({...prev,fieldMappings:updated}));
+      setAutoMapResult(`${n} field${n!==1?"s":""} mapped`);
       setAutoMapRunning(false);
     },1200);
   }
