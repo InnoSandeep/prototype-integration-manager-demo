@@ -595,36 +595,70 @@ function WebhookRegistryModal({ open, onClose, onSave }) {
   );
 }
 
-// ─── MAPPING WORKSPACE (full-screen overlay for polling integrations) ─────────
-function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPublish }) {
+// ─── MAPPING WORKSPACE (full-screen overlay for inbound integrations) ─────────
+function MappingWorkspace({ open, form, setForm, system, onBack, onSave }) {
   const [autoMapRunning, setAutoMapRunning] = useState(false);
   const [autoMapResult, setAutoMapResult]   = useState(null);
   const [validateRunning, setValidateRunning] = useState(false);
   const [validateResult, setValidateResult]   = useState(null);
-  const [valOpen, setValOpen] = useState(false);
-  const [fetchState, setFetch] = useState("idle");
+  const [valOpen, setValOpen]               = useState(false);
+  const [fetchState, setFetch]              = useState("idle");
+  const [filterText, setFilterText]         = useState("");
+  const [collapsedGrps, setCollapsedGrps]   = useState({});
   const fetchTimer = useRef(null);
 
-  useEffect(()=>{ if(!open){ setAutoMapResult(null); setValidateResult(null); setValOpen(false); setFetch("idle"); } },[open]);
+  useEffect(()=>{
+    if(!open){
+      setAutoMapResult(null); setValidateResult(null); setValOpen(false);
+      setFetch("idle"); setFilterText(""); setCollapsedGrps({});
+    }
+  },[open]);
   useEffect(()=>()=>clearTimeout(fetchTimer.current),[]);
   if(!open) return null;
 
-  const collections = form.businessObjects || [];
-  const product = form.product || "";
+  const collections    = form.businessObjects || [];
+  const product        = form.product || "";
+  const hasPullEndpoint = !!form.baseUrl;
 
-  function getTargetFields(col) {
-    return (NESTED_TARGET_SCHEMA[product]?.[col] || []).map(f=>f.path);
-  }
-  function allTargetFields() {
+  // Target options: value = "Col::path", label = "Col.path"
+  function allTargetOpts() {
     const all = [];
     collections.forEach(col=>{
-      (NESTED_TARGET_SCHEMA[product]?.[col]||[]).forEach(f=>{ all.push(`${col}::${f.path}`); });
+      (NESTED_TARGET_SCHEMA[product]?.[col]||[]).forEach(f=>{
+        all.push({ value:`${col}::${f.path}`, label:`${col}.${f.path}` });
+      });
     });
     return all;
   }
+  const targetOpts = allTargetOpts();
+
+  // Source options from SAMPLE_FIELDS
+  const srcOpts = SAMPLE_FIELDS.map(f=>f.src);
+
+  // Build payload field tree: root fields + groups
+  function buildTree() {
+    const groups = {}, roots = [];
+    SAMPLE_FIELDS.forEach(f=>{
+      const m = f.src.match(/^([a-z_]+)[\.\[]/);
+      if(m){ const g=m[1]; if(!groups[g])groups[g]=[]; groups[g].push(f); }
+      else roots.push(f);
+    });
+    return { roots, groups };
+  }
+  const { roots, groups } = buildTree();
+
+  function toggleGrp(g){ setCollapsedGrps(s=>({...s,[g]:!s[g]})); }
 
   function updateMapping(idx, key, val) {
-    setForm(f=>{ const m=[...f.fieldMappings]; m[idx]={...m[idx],[key]:val,rowState:val?(m[idx].rowState==="auto-mapped"?"auto-mapped":"manual"):"unmapped"}; return {...f,fieldMappings:m}; });
+    setForm(f=>{
+      const m=[...f.fieldMappings];
+      m[idx]={...m[idx],[key]:val,rowState:val?(m[idx].rowState==="auto-mapped"?"auto-mapped":"manual"):"unmapped"};
+      return {...f,fieldMappings:m};
+    });
+  }
+  function updateSrc(idx, newSrc) {
+    const sf = SAMPLE_FIELDS.find(f=>f.src===newSrc)||{src:newSrc,srcType:"string",required:false,refLookup:false,nested:newSrc.includes("."),arrayPath:newSrc.includes("[]")};
+    setForm(f=>{ const m=[...f.fieldMappings]; m[idx]={...m[idx],...sf,target:"",rowState:"unmapped"}; return {...f,fieldMappings:m}; });
   }
 
   function handleFetchSample() {
@@ -642,7 +676,6 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
       setForm(f=>({...f,fieldMappings:f.fieldMappings.map(m=>{
         const rule = AUTO_MAP_RULES[m.src];
         if(!rule||m.target) return m.target?{...m,rowState:"manual"}:m;
-        // find first collection that has this path
         let matched = null;
         for(const col of (f.businessObjects||[])){
           const fields = NESTED_TARGET_SCHEMA[f.product]?.[col]||[];
@@ -650,8 +683,8 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
         }
         return matched ? {...m,target:matched,rowState:"auto-mapped"} : m;
       })}));
-      const mappedCount = form.fieldMappings.filter(m=>AUTO_MAP_RULES[m.src]).length;
-      setAutoMapResult(`${mappedCount} field${mappedCount!==1?"s":""} mapped`);
+      const n = form.fieldMappings.filter(m=>AUTO_MAP_RULES[m.src]).length;
+      setAutoMapResult(`${n} field${n!==1?"s":""} mapped`);
       setAutoMapRunning(false);
     },1200);
   }
@@ -682,8 +715,30 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
   const unmappedRequired = form.fieldMappings.filter(m=>m.required&&!m.target).length;
   const dupTargets = (()=>{ const mp=form.fieldMappings.filter(m=>m.target).map(m=>m.target); return mp.filter((t,i)=>mp.indexOf(t)!==i); })();
   const mappedCount = form.fieldMappings.filter(m=>m.target).length;
+  const mappingComplete = unmappedRequired===0 && mappedCount>0;
 
-  const targetOpts = allTargetFields();
+  const mappingStatus = mappingComplete
+    ? {label:"Ready to publish", color:C.green, bg:C.greenBg, border:C.greenBorder}
+    : mappedCount===0
+      ? {label:"Mapping required", color:C.red, bg:C.redBg, border:C.redBorder}
+      : {label:`Mapping incomplete — ${unmappedRequired} required field${unmappedRequired!==1?"s":""} unmapped`, color:C.amber, bg:C.amberBg, border:C.amberBorder};
+
+  const filteredRows = form.fieldMappings
+    .map((m,i)=>({...m,_idx:i}))
+    .filter(m=>!filterText.trim()||m.src.toLowerCase().includes(filterText.toLowerCase())||m.target.toLowerCase().includes(filterText.toLowerCase()));
+
+  function FieldTreeRow({ f, indent }) {
+    const typeColors={string:C.text2,datetime:C.teal,number:C.blue,enum:C.purple,url:C.amber};
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:`5px ${indent?28:14}px 5px ${indent?28:14}px`,borderBottom:`1px solid ${C.border0}`,background:C.bg0}}>
+        <MonoText size={11} color={C.text0}>{f.src}</MonoText>
+        {f.arrayPath&&<span style={{fontSize:8,fontWeight:700,color:C.purple,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,padding:"0 3px"}}>array</span>}
+        {f.refLookup&&<span style={{color:C.amber,fontSize:11}}>⚠</span>}
+        <span style={{marginLeft:"auto",fontFamily:MONO,fontSize:10,color:typeColors[f.srcType]||C.text3}}>{f.srcType}</span>
+        {f.required&&<span style={{fontSize:9,fontWeight:700,color:C.red}}>req</span>}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -699,72 +754,91 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontFamily:FONT,fontSize:12,color:mappedCount>0?C.text1:C.text3}}>
-              {mappedCount} of {form.fieldMappings.length} mapped
-            </span>
-            {unmappedRequired>0&&<span style={{background:C.amberBg,border:`1px solid ${C.amberBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.amber,padding:"2px 8px"}}>{unmappedRequired} required unmapped</span>}
-            {unmappedRequired===0&&mappedCount>0&&<span style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.green,padding:"2px 8px"}}>Ready</span>}
+            <span style={{fontFamily:FONT,fontSize:11,fontWeight:700,color:mappingStatus.color,background:mappingStatus.bg,border:`1px solid ${mappingStatus.border}`,padding:"3px 10px"}}>{mappingStatus.label}</span>
+            <span style={{fontFamily:FONT,fontSize:12,color:C.text3}}>{mappedCount}/{form.fieldMappings.length} mapped</span>
           </div>
         </div>
 
-        {/* Body: two-column layout */}
+        {/* Body */}
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
-          {/* Left panel: source schema + sample */}
-          <div style={{width:340,flexShrink:0,borderRight:`1px solid ${C.border0}`,display:"flex",flexDirection:"column",overflowY:"auto",padding:"20px 20px"}}>
-            <SectionRule label="Target Collections"/>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
-              {collections.map(col=>(
-                <span key={col} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.blue,padding:"3px 10px"}}>{col}</span>
-              ))}
+          {/* Left panel: target collections + payload field tree */}
+          <div style={{width:320,flexShrink:0,borderRight:`1px solid ${C.border0}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Collections */}
+            <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border0}`,flexShrink:0}}>
+              <div style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Target Collections</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {collections.map(col=>(
+                  <span key={col} style={{background:C.blueBg,border:`1px solid ${C.blueBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.blue,padding:"2px 8px"}}>{col}</span>
+                ))}
+              </div>
             </div>
-            <SectionRule label="Source Sample"/>
-            <div style={{marginBottom:10,display:"flex",alignItems:"center",gap:8}}>
-              {fetchState==="idle"&&<button onClick={handleFetchSample} disabled={!form.baseUrl} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:!form.baseUrl?C.text3:C.blue,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:!form.baseUrl?"not-allowed":"pointer",opacity:!form.baseUrl?0.5:1,display:"flex",alignItems:"center",gap:6}}>▶ Pull sample</button>}
-              {fetchState==="loading"&&<button disabled style={{background:C.bg0,border:`1px solid ${C.border0}`,color:C.text3,fontFamily:FONT,fontSize:12,padding:"5px 12px",cursor:"wait",display:"flex",alignItems:"center",gap:6}}><Spinner size={11}/> Pulling…</button>}
-              {fetchState==="done"&&<button onClick={handleFetchSample} style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,color:C.green,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"5px 12px",cursor:"pointer"}}>✓ Re-pull</button>}
-            </div>
-            {form.schemaSummary&&(
-              <div style={{background:C.bg1,border:`1px solid ${C.border0}`,borderLeft:`3px solid ${C.green}`,padding:"8px 12px",marginBottom:12}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"4px 12px"}}>
-                  {[{label:"Fields",val:form.schemaSummary.fieldsDetected},{label:"Nested",val:form.schemaSummary.nestedObjects},{label:"Arrays",val:form.schemaSummary.arraysDetected},{label:"Ref-like",val:form.schemaSummary.referenceLikeFields}].map(s=>(
-                    <div key={s.label} style={{display:"flex",alignItems:"baseline",gap:4}}><span style={{fontFamily:FONT,fontSize:15,fontWeight:700,color:C.text0}}>{s.val}</span><span style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{s.label}</span></div>
+
+            {/* Sample pull */}
+            <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border0}`,flexShrink:0}}>
+              <div style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Source Sample</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                {hasPullEndpoint?(
+                  fetchState==="idle"?<button onClick={handleFetchSample} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.blue,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"4px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>▶ Pull sample</button>:
+                  fetchState==="loading"?<button disabled style={{background:C.bg0,border:`1px solid ${C.border0}`,color:C.text3,fontFamily:FONT,fontSize:12,padding:"4px 10px",display:"flex",alignItems:"center",gap:5}}><Spinner size={11}/> Pulling…</button>:
+                  <button onClick={handleFetchSample} style={{background:C.greenBg,border:`1px solid ${C.greenBorder}`,color:C.green,fontFamily:FONT,fontSize:12,fontWeight:600,padding:"4px 10px",cursor:"pointer"}}>✓ Re-pull</button>
+                ):(
+                  <span style={{fontFamily:FONT,fontSize:11,color:C.text3}}>Paste JSON in mapping row to inspect values</span>
+                )}
+              </div>
+              {form.schemaSummary&&(
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  {[{label:"Fields",val:form.schemaSummary.fieldsDetected},{label:"Nested",val:form.schemaSummary.nestedObjects},{label:"Arrays",val:form.schemaSummary.arraysDetected}].map(s=>(
+                    <div key={s.label} style={{display:"flex",alignItems:"baseline",gap:3}}><span style={{fontFamily:FONT,fontSize:14,fontWeight:700,color:C.text0}}>{s.val}</span><span style={{fontFamily:FONT,fontSize:10,color:C.text2}}>{s.label}</span></div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Payload field tree */}
+            <div style={{flex:1,overflowY:"auto"}}>
+              <div style={{padding:"8px 14px 4px",fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.08em",background:C.bg2,borderBottom:`1px solid ${C.border0}`,position:"sticky",top:0}}>
+                Payload Fields
               </div>
-            )}
-            {form.sampleJson&&(
-              <pre style={{fontFamily:MONO,fontSize:11,color:C.text1,background:C.bg1,border:`1px solid ${C.border0}`,padding:"10px 12px",overflowX:"auto",overflowY:"auto",maxHeight:320,margin:0,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{form.sampleJson}</pre>
-            )}
+              {roots.map(f=><FieldTreeRow key={f.src} f={f} indent={false}/>)}
+              {Object.entries(groups).map(([grp,fields])=>(
+                <div key={grp}>
+                  <div onClick={()=>toggleGrp(grp)} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",background:C.bg1,borderBottom:`1px solid ${C.border0}`,cursor:"pointer",userSelect:"none"}}>
+                    <span style={{fontSize:9,color:C.text3}}>{collapsedGrps[grp]?"▶":"▼"}</span>
+                    <MonoText size={11} color={C.text1}>{grp}</MonoText>
+                    <span style={{marginLeft:"auto",fontFamily:FONT,fontSize:10,color:C.text3}}>{fields.length} fields</span>
+                  </div>
+                  {!collapsedGrps[grp]&&fields.map(f=><FieldTreeRow key={f.src} f={f} indent={true}/>)}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Right panel: mapping table */}
           <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             {/* Toolbar */}
-            <div style={{padding:"12px 20px",borderBottom:`1px solid ${C.border0}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:C.bg0}}>
-              <AIActionButton
-                label="Auto Map"
-                desc="Match source fields to target paths automatically"
-                running={autoMapRunning}
-                result={autoMapResult}
-                onClick={handleAutoMap}
-              />
-              <AIActionButton
-                label="Validate"
-                desc="Check required fields, types, and duplicates"
-                running={validateRunning}
-                result={validateResult}
-                onClick={handleValidate}
-              />
+            <div style={{padding:"10px 20px",borderBottom:`1px solid ${C.border0}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:C.bg0,flexWrap:"wrap"}}>
+              <AIActionButton label="Auto Map" desc="Match source fields to target paths automatically" running={autoMapRunning} result={autoMapResult} onClick={handleAutoMap}/>
+              <AIActionButton label="Validate" desc="Check required fields, types, and duplicates" running={validateRunning} result={validateResult} onClick={handleValidate}/>
               <div style={{flex:1}}/>
               {dupTargets.length>0&&<span style={{background:C.amberBg,border:`1px solid ${C.amberBorder}`,fontFamily:FONT,fontSize:11,fontWeight:700,color:C.amber,padding:"3px 8px"}}>Duplicate target</span>}
-              {(form.validationResult)&&(<button onClick={()=>setValOpen(o=>!o)} style={{background:"none",border:`1px solid ${C.border0}`,fontFamily:FONT,fontSize:12,fontWeight:600,color:C.text1,padding:"5px 10px",cursor:"pointer"}}>{valOpen?"Hide":"Show"} validation</button>)}
+              {form.validationResult&&<button onClick={()=>setValOpen(o=>!o)} style={{background:"none",border:`1px solid ${C.border0}`,fontFamily:FONT,fontSize:12,fontWeight:600,color:C.text1,padding:"4px 10px",cursor:"pointer"}}>{valOpen?"Hide":"Show"} validation</button>}
+              <div style={{display:"flex",alignItems:"center",gap:0,border:`1px solid ${C.border1}`,background:C.bg0}}>
+                <span style={{padding:"0 8px",color:C.text3,fontSize:12,lineHeight:"30px"}}>⌕</span>
+                <input
+                  value={filterText}
+                  onChange={e=>setFilterText(e.target.value)}
+                  placeholder="Filter fields…"
+                  style={{fontFamily:FONT,fontSize:12,border:"none",outline:"none",padding:"5px 8px 5px 0",width:160,color:C.text0,background:"transparent"}}
+                />
+                {filterText&&<button onClick={()=>setFilterText("")} style={{background:"none",border:"none",color:C.text3,fontSize:13,cursor:"pointer",padding:"0 6px",lineHeight:"30px"}}>×</button>}
+              </div>
             </div>
 
             {/* Validation panel */}
             {valOpen&&form.validationResult&&(
-              <div style={{padding:"10px 20px",background:C.bg1,borderBottom:`1px solid ${C.border0}`,flexShrink:0}}>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              <div style={{padding:"8px 20px",background:C.bg1,borderBottom:`1px solid ${C.border0}`,flexShrink:0}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                   {[
                     {label:"Required mapped",ok:form.validationResult.unmappedRequired===0,detail:`${form.validationResult.requiredMapped}/${form.validationResult.requiredTotal}`},
                     {label:"Optional skipped",ok:true,detail:`${form.validationResult.optionalSkipped}`},
@@ -772,8 +846,8 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
                     {label:"Duplicates",ok:form.validationResult.duplicateTargets===0,detail:`${form.validationResult.duplicateTargets}`},
                     {label:"Ref lookups",ok:true,detail:`${form.validationResult.refLookups}`},
                   ].map(row=>(
-                    <div key={row.label} style={{background:row.ok?C.greenBg:C.amberBg,border:`1px solid ${row.ok?C.greenBorder:C.amberBorder}`,padding:"4px 10px",display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{color:row.ok?C.green:C.amber,fontWeight:700,fontSize:12}}>{row.ok?"✓":"!"}</span>
+                    <div key={row.label} style={{background:row.ok?C.greenBg:C.amberBg,border:`1px solid ${row.ok?C.greenBorder:C.amberBorder}`,padding:"3px 8px",display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{color:row.ok?C.green:C.amber,fontWeight:700,fontSize:11}}>{row.ok?"✓":"!"}</span>
                       <span style={{fontFamily:FONT,fontSize:11,color:C.text1}}>{row.label}:</span>
                       <span style={{fontFamily:FONT,fontSize:11,fontWeight:700,color:row.ok?C.text0:C.amber}}>{row.detail}</span>
                     </div>
@@ -784,45 +858,42 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
 
             {/* Table */}
             <div style={{flex:1,overflowY:"auto"}}>
-              <div style={{display:"grid",gridTemplateColumns:"minmax(160px,1.5fr) 64px 78px 88px minmax(160px,1fr) minmax(120px,0.9fr)",padding:"6px 20px",background:C.bg2,borderBottom:`1px solid ${C.border0}`,position:"sticky",top:0,zIndex:1}}>
-                {["Source Field","Type","Required","Status","Target Path","Collection"].map(h=>(
+              <div style={{display:"grid",gridTemplateColumns:"minmax(150px,1.3fr) 60px 74px 82px minmax(200px,1.6fr)",padding:"6px 20px",background:C.bg2,borderBottom:`1px solid ${C.border0}`,position:"sticky",top:0,zIndex:1}}>
+                {["Source Field","Type","Required","Status","Innovapptive Target"].map(h=>(
                   <div key={h} style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:C.text2,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
                 ))}
               </div>
-              {form.fieldMappings.map((m,i)=>{
-                const rowBg=m.rowState==="auto-mapped"?"#F5FAF7":(!m.target&&m.required)?"#FFF8F8":i%2===0?C.bg0:C.bg1;
+              {filteredRows.length===0&&(
+                <div style={{padding:"24px 20px",fontFamily:FONT,fontSize:12,color:C.text3,textAlign:"center"}}>No fields match "{filterText}"</div>
+              )}
+              {filteredRows.map((m,visIdx)=>{
+                const idx = m._idx;
+                const rowBg=m.rowState==="auto-mapped"?"#F5FAF7":(!m.target&&m.required)?"#FFF8F8":visIdx%2===0?C.bg0:C.bg1;
                 const stateLabel={
                   "auto-mapped":{label:"Auto",color:C.green,bg:C.greenBg,border:C.greenBorder},
                   "manual":{label:"Manual",color:C.blue,bg:C.blueBg,border:C.blueBorder},
                   "unmapped":{label:"—",color:C.text3,bg:"transparent",border:"transparent"},
                 }[m.rowState]||{label:"—",color:C.text3,bg:"transparent",border:"transparent"};
-
-                // Parse collection::path from target value
-                const [targetCol, targetPath] = m.target ? m.target.split("::") : ["",""];
-
                 return (
-                  <div key={m.src+i} style={{display:"grid",gridTemplateColumns:"minmax(160px,1.5fr) 64px 78px 88px minmax(160px,1fr) minmax(120px,0.9fr)",padding:"6px 20px",borderBottom:`1px solid ${C.border0}`,background:rowBg,alignItems:"center"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}}>
-                      <MonoText size={11} color={C.text0}>{m.src}</MonoText>
-                      {m.nested&&<span style={{fontSize:9,color:C.text3,background:C.bg2,border:`1px solid ${C.border0}`,padding:"0 3px"}}>nested</span>}
-                      {m.arrayPath&&<span style={{fontSize:9,color:C.purple,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,padding:"0 3px"}}>array</span>}
-                      {m.refLookup&&<span style={{marginLeft:2,color:C.amber,fontSize:12}}>⚠</span>}
-                    </div>
-                    <span style={{fontFamily:MONO,fontSize:10,color:C.text2}}>{m.srcType}</span>
-                    <span style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:m.required?C.red:C.text3}}>{m.required?"Required":"Optional"}</span>
+                  <div key={m.src+idx} style={{display:"grid",gridTemplateColumns:"minmax(150px,1.3fr) 60px 74px 82px minmax(200px,1.6fr)",padding:"4px 20px",borderBottom:`1px solid ${C.border0}`,background:rowBg,alignItems:"center",gap:0}}>
+                    <select
+                      value={m.src}
+                      onChange={e=>updateSrc(idx,e.target.value)}
+                      style={{fontFamily:MONO,fontSize:11,background:"transparent",border:`1px solid ${C.border0}`,color:C.text0,padding:"3px 5px",outline:"none",cursor:"pointer",width:"100%"}}
+                    >
+                      {srcOpts.map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <span style={{fontFamily:MONO,fontSize:10,color:C.text2,paddingLeft:4}}>{m.srcType}</span>
+                    <span style={{fontFamily:FONT,fontSize:10,fontWeight:700,color:m.required?C.red:C.text3,paddingLeft:4}}>{m.required?"Required":"Optional"}</span>
                     <span style={{fontFamily:FONT,fontSize:10,fontWeight:600,color:stateLabel.color,background:stateLabel.bg,border:`1px solid ${stateLabel.border}`,padding:"1px 5px",whiteSpace:"nowrap"}}>{stateLabel.label}</span>
                     <select
                       value={m.target}
-                      onChange={e=>updateMapping(i,"target",e.target.value)}
+                      onChange={e=>updateMapping(idx,"target",e.target.value)}
                       style={{fontFamily:FONT,fontSize:12,background:C.bg0,border:`1px solid ${(!m.target&&m.required)?C.redBorder:dupTargets.includes(m.target)?C.amberBorder:C.border1}`,color:m.target?C.text0:C.text3,padding:"4px 6px",outline:"none",cursor:"pointer",width:"100%"}}
                     >
                       <option value="">— Select target —</option>
-                      {targetOpts.map(t=>{
-                        const [c,p]=t.split("::");
-                        return <option key={t} value={t}>{p}</option>;
-                      })}
+                      {targetOpts.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
-                    <div style={{fontFamily:FONT,fontSize:11,color:targetCol?C.blue:C.text3,fontWeight:targetCol?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{targetCol||"—"}</div>
                   </div>
                 );
               })}
@@ -831,13 +902,16 @@ function MappingWorkspace({ open, form, setForm, system, onBack, onSave, onPubli
         </div>
 
         {/* Footer */}
-        <div style={{height:60,display:"flex",alignItems:"center",justifyContent:"flex-end",padding:"0 24px",borderTop:`1px solid ${C.border0}`,background:C.bg1,flexShrink:0,gap:10}}>
+        <div style={{height:64,display:"flex",alignItems:"center",padding:"0 24px",borderTop:`1px solid ${C.border0}`,background:C.bg1,flexShrink:0,gap:10}}>
+          <span style={{fontFamily:FONT,fontSize:12,fontWeight:700,color:mappingStatus.color,background:mappingStatus.bg,border:`1px solid ${mappingStatus.border}`,padding:"4px 12px"}}>{mappingStatus.label}</span>
+          <div style={{flex:1}}/>
           <button onClick={onBack} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"8px 20px",cursor:"pointer"}}>Back</button>
           <button onClick={()=>onSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"8px 20px",cursor:"pointer"}}>Save as Draft</button>
           <button
             onClick={()=>onSave(true)}
-            disabled={unmappedRequired>0}
-            style={{background:unmappedRequired>0?C.bg2:C.blue,border:`1px solid ${unmappedRequired>0?C.border1:C.blueHover}`,color:unmappedRequired>0?C.text3:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"8px 24px",cursor:unmappedRequired>0?"not-allowed":"pointer"}}
+            disabled={!mappingComplete}
+            title={!mappingComplete?mappingStatus.label:""}
+            style={{background:mappingComplete?C.blue:C.bg2,border:`1px solid ${mappingComplete?C.blueHover:C.border1}`,color:mappingComplete?"#fff":C.text3,fontFamily:FONT,fontSize:13,fontWeight:700,padding:"8px 24px",cursor:mappingComplete?"pointer":"not-allowed"}}
           >Publish Integration</button>
         </div>
       </div>
@@ -944,7 +1018,7 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     {label:"Direction and method set", ok:!!form.direction&&!!form.method},
     {label:"Connection configured", ok:isPolling?isValidUrl(form.baseUrl):isInboundWebhook?isValidUrl(form.listenerEndpointUrl):isOutboundWebhook?!!form.selectedWebhookId:true},
     {label:"Product and collections set", ok:isOutbound?true:!!form.product&&form.businessObjects.length>0},
-    {label:"Required mappings complete", ok:isPolling?unmappedRequired===0:true},
+    {label:"Required mappings complete", ok:isInbound?(unmappedRequired===0&&form.fieldMappings.some(m=>m.target)):true},
     {label:"Runtime settings valid", ok:isPolling?!!form.frequency:true},
   ];
 
@@ -1001,8 +1075,8 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
     </>
   );
 
-  // Polling mapping workspace — full-screen overlay
-  if(mappingOpen&&isPolling) return (
+  // Inbound mapping workspace — full-screen overlay (both webhook and polling)
+  if(mappingOpen&&isInbound) return (
     <MappingWorkspace
       open={mappingOpen}
       form={form}
@@ -1275,6 +1349,30 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     </div>
                   </div>
                   <div style={{marginBottom:20}}>
+                    <SectionRule label="Data Mapping"/>
+                    {(()=>{
+                      const mapped=form.fieldMappings.filter(m=>m.target).length;
+                      const reqUnmapped=form.fieldMappings.filter(m=>m.required&&!m.target).length;
+                      const complete=reqUnmapped===0&&mapped>0;
+                      const statusLabel=complete?"Ready to publish":mapped===0?"Mapping required":`Mapping incomplete — ${reqUnmapped} required field${reqUnmapped!==1?"s":""} unmapped`;
+                      const statusColor=complete?C.green:mapped===0?C.red:C.amber;
+                      const statusBg=complete?C.greenBg:mapped===0?C.redBg:C.amberBg;
+                      const statusBorder=complete?C.greenBorder:mapped===0?C.redBorder:C.amberBorder;
+                      return (
+                        <div style={{background:C.bg1,border:`1px solid ${statusBorder}`,borderLeft:`3px solid ${statusColor}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
+                          <div style={{flex:1}}>
+                            <div style={{fontFamily:FONT,fontSize:12,fontWeight:700,color:statusColor,marginBottom:3}}>{statusLabel}</div>
+                            {mapped>0&&<div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{mapped} of {form.fieldMappings.length} fields mapped</div>}
+                            {mapped===0&&<div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>Open the mapping workspace to connect incoming payload fields to target collections.</div>}
+                          </div>
+                          <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:700,padding:"7px 16px",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                            Open Mapping Workspace →
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div style={{marginBottom:20}}>
                     <SectionRule label="How this runs"/>
                     <InfoBox variant="teal">Always real-time. This integration triggers on each verified incoming payload — no schedule required.</InfoBox>
                   </div>
@@ -1315,27 +1413,17 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
                     {(()=>{
                       const mapped=form.fieldMappings.filter(m=>m.target).length;
                       const reqUnmapped=form.fieldMappings.filter(m=>m.required&&!m.target).length;
-                      const hasMapping=mapped>0;
+                      const complete=reqUnmapped===0&&mapped>0;
+                      const statusLabel=complete?"Ready to publish":mapped===0?"Mapping required":`Mapping incomplete — ${reqUnmapped} required field${reqUnmapped!==1?"s":""} unmapped`;
+                      const statusColor=complete?C.green:mapped===0?C.red:C.amber;
+                      const statusBg=complete?C.greenBg:mapped===0?C.redBg:C.amberBg;
+                      const statusBorder=complete?C.greenBorder:mapped===0?C.redBorder:C.amberBorder;
                       return (
-                        <div style={{background:C.bg1,border:`1px solid ${hasMapping?(reqUnmapped===0?C.greenBorder:C.amberBorder):C.border0}`,borderLeft:`3px solid ${hasMapping?(reqUnmapped===0?C.green:C.amber):C.border1}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
+                        <div style={{background:C.bg1,border:`1px solid ${statusBorder}`,borderLeft:`3px solid ${statusColor}`,padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
                           <div style={{flex:1}}>
-                            {hasMapping?(
-                              <>
-                                <div style={{fontFamily:FONT,fontSize:13,fontWeight:700,color:C.text0,marginBottom:3}}>
-                                  {mapped} of {form.fieldMappings.length} fields mapped
-                                </div>
-                                {reqUnmapped>0?(
-                                  <div style={{fontFamily:FONT,fontSize:11,color:C.amber}}>{reqUnmapped} required field{reqUnmapped!==1?"s":""} still unmapped — open workspace to complete.</div>
-                                ):(
-                                  <div style={{fontFamily:FONT,fontSize:11,color:C.green}}>All required fields mapped.</div>
-                                )}
-                              </>
-                            ):(
-                              <>
-                                <div style={{fontFamily:FONT,fontSize:13,fontWeight:600,color:C.text0,marginBottom:3}}>No fields mapped yet</div>
-                                <div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>Open the mapping workspace to connect source fields to target paths.</div>
-                              </>
-                            )}
+                            <div style={{fontFamily:FONT,fontSize:12,fontWeight:700,color:statusColor,marginBottom:3}}>{statusLabel}</div>
+                            {mapped>0&&<div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>{mapped} of {form.fieldMappings.length} fields mapped</div>}
+                            {mapped===0&&<div style={{fontFamily:FONT,fontSize:11,color:C.text2}}>Open the mapping workspace to connect source fields to target paths.</div>}
                           </div>
                           <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:12,fontWeight:700,padding:"7px 16px",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
                             Open Mapping Workspace →
@@ -1440,11 +1528,15 @@ function AddIntegrationDrawer({ open, system, onClose, onSave, onGoToSystem, web
               )}
             </>
           )}
-          {step===2&&!isPolling&&(
+          {step===2&&isInboundWebhook&&(
             <>
               <button onClick={()=>setStep(1)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 14px",cursor:"pointer"}}>← Back</button>
               <button onClick={()=>handleSave(false)} style={{background:C.bg0,border:`1px solid ${C.border1}`,color:C.text1,fontFamily:FONT,fontSize:13,fontWeight:600,padding:"7px 16px",cursor:"pointer"}}>Save as Draft</button>
-              <button onClick={()=>handleSave(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Publish Integration</button>
+              {unmappedRequired>0||form.fieldMappings.every(m=>!m.target)?(
+                <button onClick={()=>setMappingOpen(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Continue →</button>
+              ):(
+                <button onClick={()=>handleSave(true)} style={{background:C.blue,border:`1px solid ${C.blueHover}`,color:"#fff",fontFamily:FONT,fontSize:13,fontWeight:700,padding:"7px 18px",cursor:"pointer"}}>Publish Integration</button>
+              )}
             </>
           )}
         </div>
